@@ -1249,6 +1249,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  // Getter برای تعیین ImageProvider به صورت type-safe
+  ImageProvider? get _avatarImage {
+    if (_avatarFile != null) return FileImage(_avatarFile!);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (auth.user?.avatar != null) {
+      return CachedNetworkImageProvider(auth.user!.avatar!);
+    }
+    return null;
+  }
+
   Future<void> _uploadAvatar() async {
     if (_avatarFile == null) return;
     setState(() => _isUploading = true);
@@ -1275,11 +1285,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             CircleAvatar(
               radius: 60,
-              backgroundImage: _avatarFile != null
-                  ? FileImage(_avatarFile!)
-                  : (auth.user?.avatar != null
-                      ? CachedNetworkImageProvider(auth.user!.avatar!)
-                      : null),
+              backgroundImage: _avatarImage, // استفاده از getter
               child: _avatarFile == null && auth.user?.avatar == null
                   ? Icon(Icons.person, size: 60)
                   : null,
