@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';  // اضافه شد
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -142,7 +143,7 @@ class ApiService {
   final HttpClient _httpClient = HttpClient()
     ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
 
-  http.Client get _client => IOClient(_httpClient);
+  http.Client get _client => IOClient(_httpClient);  // حالا IOClient شناسایی می‌شود
 
   void setToken(String token) {
     _token = token;
@@ -530,7 +531,7 @@ class ProfileProvider extends ChangeNotifier {
 }
 
 // ------------------- Screens -------------------
-// Login Screen (بدون تغییر)
+// Login Screen
 class LoginScreen extends StatefulWidget {
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -594,7 +595,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// Register Screen (بدون تغییر)
+// Register Screen
 class RegisterScreen extends StatefulWidget {
   @override
   _RegisterScreenState createState() => _RegisterScreenState();
@@ -712,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// تب فید (لیست پست‌ها)
+// تب فید
 class FeedTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -729,7 +730,7 @@ class FeedTab extends StatelessWidget {
   }
 }
 
-// تب پروفایل (پروفایل کاربر فعلی)
+// تب پروفایل کاربر فعلی
 class ProfileTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -738,7 +739,7 @@ class ProfileTab extends StatelessWidget {
   }
 }
 
-// ویجت نمایش پست در فید
+// ویجت پست در فید
 class PostWidget extends StatelessWidget {
   final Post post;
 
@@ -859,7 +860,7 @@ class PostWidget extends StatelessWidget {
   }
 }
 
-// ویجت پخش ویدئو (با قابلیت autoPlay)
+// ویجت ویدئو پلیر
 class VideoPlayerWidget extends StatefulWidget {
   final String url;
   final bool autoPlay;
@@ -920,7 +921,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   }
 }
 
-// صفحه Reels (ویدئوهای تمام‌صفحه)
+// صفحه Reels
 class ReelsScreen extends StatefulWidget {
   @override
   _ReelsScreenState createState() => _ReelsScreenState();
@@ -1155,7 +1156,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
                         if (value.isNotEmpty) {
                           try {
                             final newComment = await ApiService().commentPost(post.id, value);
-                            // بروزرسانی پست
+                            // بروزرسانی پست - نیاز به بازنشانی داریم اما فعلاً ساده می‌گیریم
                           } catch (e) {}
                           Navigator.pop(ctx);
                         }
