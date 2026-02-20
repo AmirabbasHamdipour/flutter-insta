@@ -1,0 +1,17 @@
+# Flutter/Dart specific
+# Build outputs
+**/build/
+# Dart/Pub related
+**/.dart_tool/
+**/.packages
+**/pubspec.lock
+# Flutter specific
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+# Android specific
+**/android/**/gradle-wrapper.jar
+**/android/**/gradle-wrapper.properties
+# macOS specific
+**/macos/Flutter/ephemeral/
+# Visual Studio Code
+.vscode/
