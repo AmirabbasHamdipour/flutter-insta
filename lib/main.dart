@@ -133,7 +133,7 @@ class Post {
 
 // ------------------- API Service -------------------
 class ApiService {
-  static const String baseUrl = 'https://API.tweeter.runflare.run';
+  static const String baseUrl = 'https://API-tweeter.runflare.run';
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
