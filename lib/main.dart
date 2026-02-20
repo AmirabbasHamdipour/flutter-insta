@@ -131,14 +131,18 @@ class Post {
   }
 }
 
-// ------------------- API Service -------------------
+// ------------------- API Service (با نادیده گرفتن گواهی SSL) -------------------
 class ApiService {
-  static const String baseUrl = 'https://API-tweeter.runflare.run';
+  static const String baseUrl = 'https://api-tweeter.runflare.run';
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
   String? _token;
+  final HttpClient _httpClient = HttpClient()
+    ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+
+  http.Client get _client => IOClient(_httpClient);
 
   void setToken(String token) {
     _token = token;
@@ -158,100 +162,135 @@ class ApiService {
   // Auth
   Future<Map<String, dynamic>> register(
       String username, String password, String fullName, String bio) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-        'full_name': fullName,
-        'bio': bio,
-      }),
-    );
-    if (response.statusCode == 201) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ثبت‌نام');
+    final client = _client;
+    try {
+      final response = await client.post(
+        Uri.parse('$baseUrl/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+          'full_name': fullName,
+          'bio': bio,
+        }),
+      );
+      if (response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ثبت‌نام');
+      }
+    } finally {
+      client.close();
     }
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'username': username, 'password': password}),
-    );
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ورود');
+    final client = _client;
+    try {
+      final response = await client.post(
+        Uri.parse('$baseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ورود');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Feed
   Future<List<Post>> getFeed() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/feed'),
-      headers: await _headers(),
-    );
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((p) => Post.fromJson(p)).toList();
-    } else {
-      throw Exception('خطا در دریافت فید');
+    final client = _client;
+    try {
+      final response = await client.get(
+        Uri.parse('$baseUrl/feed'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((p) => Post.fromJson(p)).toList();
+      } else {
+        throw Exception('خطا در دریافت فید');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Post detail
   Future<Post> getPost(int postId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/post/$postId'),
-      headers: await _headers(),
-    );
-    if (response.statusCode == 200) {
-      return Post.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('خطا در دریافت پست');
+    final client = _client;
+    try {
+      final response = await client.get(
+        Uri.parse('$baseUrl/post/$postId'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200) {
+        return Post.fromJson(jsonDecode(response.body));
+      } else {
+        throw Exception('خطا در دریافت پست');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Like
   Future<bool> likePost(int postId) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/post/$postId/like'),
-      headers: await _headers(),
-    );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body)['liked'];
-    } else {
-      throw Exception('خطا در لایک');
+    final client = _client;
+    try {
+      final response = await client.post(
+        Uri.parse('$baseUrl/post/$postId/like'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body)['liked'];
+      } else {
+        throw Exception('خطا در لایک');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Comment
   Future<Comment> commentPost(int postId, String content) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/post/$postId/comment'),
-      headers: await _headers(),
-      body: jsonEncode({'content': content}),
-    );
-    if (response.statusCode == 201) {
-      return Comment.fromJson(jsonDecode(response.body)['comment']);
-    } else {
-      throw Exception('خطا در ارسال کامنت');
+    final client = _client;
+    try {
+      final response = await client.post(
+        Uri.parse('$baseUrl/post/$postId/comment'),
+        headers: await _headers(),
+        body: jsonEncode({'content': content}),
+      );
+      if (response.statusCode == 201) {
+        return Comment.fromJson(jsonDecode(response.body)['comment']);
+      } else {
+        throw Exception('خطا در ارسال کامنت');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Save
   Future<bool> savePost(int postId) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/post/$postId/save'),
-      headers: await _headers(),
-    );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body)['saved'];
-    } else {
-      throw Exception('خطا در ذخیره');
+    final client = _client;
+    try {
+      final response = await client.post(
+        Uri.parse('$baseUrl/post/$postId/save'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body)['saved'];
+      } else {
+        throw Exception('خطا در ذخیره');
+      }
+    } finally {
+      client.close();
     }
   }
 
@@ -261,12 +300,17 @@ class ApiService {
     request.headers.addAll(await _headers());
     request.fields['caption'] = caption;
     request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path));
-    var response = await request.send();
-    var responseData = await response.stream.bytesToString();
-    if (response.statusCode == 201) {
-      return Post.fromJson(jsonDecode(responseData)['post']);
-    } else {
-      throw Exception(jsonDecode(responseData)['error'] ?? 'خطا در ایجاد پست');
+    final client = _client;
+    try {
+      final streamedResponse = await client.send(request);
+      final response = await http.Response.fromStream(streamedResponse);
+      if (response.statusCode == 201) {
+        return Post.fromJson(jsonDecode(response.body)['post']);
+      } else {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ایجاد پست');
+      }
+    } finally {
+      client.close();
     }
   }
 
@@ -275,37 +319,52 @@ class ApiService {
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/user/avatar'));
     request.headers.addAll(await _headers());
     request.files.add(await http.MultipartFile.fromPath('avatar', avatarFile.path));
-    var response = await request.send();
-    var responseData = await response.stream.bytesToString();
-    if (response.statusCode == 200) {
-      return jsonDecode(responseData)['avatar_url'];
-    } else {
-      throw Exception(jsonDecode(responseData)['error'] ?? 'خطا در آپلود آواتار');
+    final client = _client;
+    try {
+      final streamedResponse = await client.send(request);
+      final response = await http.Response.fromStream(streamedResponse);
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['avatar_url'];
+      } else {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در آپلود آواتار');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Get user profile
   Future<Map<String, dynamic>> getUserProfile(String username) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/user/$username'),
-      headers: await _headers(),
-    );
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('خطا در دریافت پروفایل');
+    final client = _client;
+    try {
+      final response = await client.get(
+        Uri.parse('$baseUrl/user/$username'),
+        headers: await _headers(),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('خطا در دریافت پروفایل');
+      }
+    } finally {
+      client.close();
     }
   }
 
   // Admin verify
   Future<void> adminVerify(String username, bool verified) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/admin/verify/$username'),
-      headers: await _headers(),
-      body: jsonEncode({'verified': verified}),
-    );
-    if (response.statusCode != 200) {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در تغییر تیک آبی');
+    final client = _client;
+    try {
+      final response = await client.put(
+        Uri.parse('$baseUrl/admin/verify/$username'),
+        headers: await _headers(),
+        body: jsonEncode({'verified': verified}),
+      );
+      if (response.statusCode != 200) {
+        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در تغییر تیک آبی');
+      }
+    } finally {
+      client.close();
     }
   }
 }
@@ -358,7 +417,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await ApiService().register(username, password, fullName, bio);
-      // after register, login
       await login(username, password);
     } finally {
       _isLoading = false;
@@ -400,14 +458,12 @@ class AuthProvider extends ChangeNotifier {
         final data = await ApiService().getUserProfile(_user!.username);
         _user = User.fromJson({
           ...data,
-          'is_admin': _user!.isAdmin, // preserve admin status from local
+          'is_admin': _user!.isAdmin,
         });
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user', jsonEncode(_user!.toJson()));
         notifyListeners();
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     }
   }
 }
@@ -418,6 +474,7 @@ class FeedProvider extends ChangeNotifier {
 
   List<Post> get posts => _posts;
   bool get isLoading => _isLoading;
+  List<Post> get videoPosts => _posts.where((p) => p.mediaType == 'video').toList();
 
   Future<void> loadFeed() async {
     _isLoading = true;
@@ -425,7 +482,7 @@ class FeedProvider extends ChangeNotifier {
     try {
       _posts = await ApiService().getFeed();
     } catch (e) {
-      // handle error
+      print(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -458,7 +515,7 @@ class ProfileProvider extends ChangeNotifier {
       _profileUser = User.fromJson(data);
       _posts = (data['posts'] as List).map((p) => Post.fromJson(p)).toList();
     } catch (e) {
-      // handle
+      print(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -473,7 +530,7 @@ class ProfileProvider extends ChangeNotifier {
 }
 
 // ------------------- Screens -------------------
-// Login Screen
+// Login Screen (بدون تغییر)
 class LoginScreen extends StatefulWidget {
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -515,8 +572,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
                       try {
-                        await auth.login(
-                            _usernameController.text, _passwordController.text);
+                        await auth.login(_usernameController.text, _passwordController.text);
                         Navigator.pushReplacementNamed(context, '/home');
                       } catch (e) {
                         ScaffoldMessenger.of(context)
@@ -538,7 +594,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// Register Screen
+// Register Screen (بدون تغییر)
 class RegisterScreen extends StatefulWidget {
   @override
   _RegisterScreenState createState() => _RegisterScreenState();
@@ -617,58 +673,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-// Home Screen (Feed)
+// صفحه اصلی با BottomNavigationBar
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<FeedProvider>(context, listen: false).loadFeed();
-    });
-  }
+  int _currentIndex = 0;
+
+  final List<Widget> _tabs = [
+    FeedTab(),
+    ReelsScreen(),
+    ProfileTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final feed = Provider.of<FeedProvider>(context);
-    final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text('خانه'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.person),
-            onPressed: () => Navigator.pushNamed(context, '/profile',
-                arguments: auth.user!.username),
-          ),
-          IconButton(
-            icon: Icon(Icons.exit_to_app),
-            onPressed: () async {
-              await auth.logout();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
+      body: _tabs[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
+        items: [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
+          BottomNavigationBarItem(icon: Icon(Icons.video_library), label: 'ریلز'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'پروفایل'),
         ],
       ),
+      floatingActionButton: _currentIndex == 0
+          ? FloatingActionButton(
+              onPressed: () => Navigator.pushNamed(context, '/create_post'),
+              child: Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+}
+
+// تب فید (لیست پست‌ها)
+class FeedTab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final feed = Provider.of<FeedProvider>(context);
+    return Scaffold(
+      appBar: AppBar(title: Text('خانه')),
       body: feed.isLoading
           ? Center(child: CircularProgressIndicator())
           : ListView.builder(
               itemCount: feed.posts.length,
               itemBuilder: (ctx, i) => PostWidget(post: feed.posts[i]),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/create_post'),
-        child: Icon(Icons.add),
-      ),
     );
   }
 }
 
-// Post Widget (used in feed and profile)
+// تب پروفایل (پروفایل کاربر فعلی)
+class ProfileTab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context);
+    return ProfileScreen(username: auth.user!.username);
+  }
+}
+
+// ویجت نمایش پست در فید
 class PostWidget extends StatelessWidget {
   final Post post;
 
@@ -676,13 +746,11 @@ class PostWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // User info
           ListTile(
             leading: CircleAvatar(
               backgroundImage: post.user.avatar != null
@@ -701,18 +769,15 @@ class PostWidget extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/profile',
                 arguments: post.user.username),
           ),
-          // Media
           GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/post/${post.id}',
-                arguments: post),
+            onTap: () => Navigator.pushNamed(context, '/post/${post.id}', arguments: post),
             child: post.mediaType == 'image'
                 ? CachedNetworkImage(imageUrl: post.mediaUrl)
                 : AspectRatio(
                     aspectRatio: 16 / 9,
-                    child: VideoPlayerWidget(url: post.mediaUrl),
+                    child: VideoPlayerWidget(url: post.mediaUrl, autoPlay: false),
                   ),
           ),
-          // Actions
           Row(
             children: [
               IconButton(
@@ -723,7 +788,6 @@ class PostWidget extends StatelessWidget {
                 onPressed: () async {
                   try {
                     final liked = await ApiService().likePost(post.id);
-                    // Update feed provider
                     final feed = Provider.of<FeedProvider>(context, listen: false);
                     final updatedPost = Post(
                       id: post.id,
@@ -750,14 +814,11 @@ class PostWidget extends StatelessWidget {
               Text('${post.likesCount}'),
               IconButton(
                 icon: Icon(Icons.comment),
-                onPressed: () => Navigator.pushNamed(context, '/post/${post.id}',
-                    arguments: post),
+                onPressed: () => Navigator.pushNamed(context, '/post/${post.id}', arguments: post),
               ),
               Text('${post.commentsCount}'),
               IconButton(
-                icon: Icon(
-                  post.savedByUser ? Icons.bookmark : Icons.bookmark_border,
-                ),
+                icon: Icon(post.savedByUser ? Icons.bookmark : Icons.bookmark_border),
                 onPressed: () async {
                   try {
                     final saved = await ApiService().savePost(post.id);
@@ -787,7 +848,6 @@ class PostWidget extends StatelessWidget {
               Text('${post.savesCount}'),
             ],
           ),
-          // Caption
           if (post.caption != null && post.caption!.isNotEmpty)
             Padding(
               padding: EdgeInsets.all(8),
@@ -799,10 +859,12 @@ class PostWidget extends StatelessWidget {
   }
 }
 
-// Video Player Widget
+// ویجت پخش ویدئو (با قابلیت autoPlay)
 class VideoPlayerWidget extends StatefulWidget {
   final String url;
-  const VideoPlayerWidget({Key? key, required this.url}) : super(key: key);
+  final bool autoPlay;
+
+  const VideoPlayerWidget({Key? key, required this.url, this.autoPlay = false}) : super(key: key);
 
   @override
   _VideoPlayerWidgetState createState() => _VideoPlayerWidgetState();
@@ -817,6 +879,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
         setState(() {});
+        if (widget.autoPlay) {
+          _controller.play();
+        }
       });
   }
 
@@ -845,9 +910,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             ),
             onPressed: () {
               setState(() {
-                _controller.value.isPlaying
-                    ? _controller.pause()
-                    : _controller.play();
+                _controller.value.isPlaying ? _controller.pause() : _controller.play();
               });
             },
           ),
@@ -857,7 +920,259 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   }
 }
 
-// Post Detail Screen
+// صفحه Reels (ویدئوهای تمام‌صفحه)
+class ReelsScreen extends StatefulWidget {
+  @override
+  _ReelsScreenState createState() => _ReelsScreenState();
+}
+
+class _ReelsScreenState extends State<ReelsScreen> {
+  late PageController _pageController;
+  int _currentIndex = 0;
+  VideoPlayerController? _videoController;
+  List<Post> videoPosts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final feed = Provider.of<FeedProvider>(context, listen: false);
+      videoPosts = feed.videoPosts;
+      if (videoPosts.isNotEmpty) {
+        _initVideoController(0);
+      }
+    });
+  }
+
+  void _initVideoController(int index) async {
+    if (videoPosts.isEmpty) return;
+    _videoController?.dispose();
+    final url = videoPosts[index].mediaUrl;
+    _videoController = VideoPlayerController.network(url)
+      ..initialize().then((_) {
+        setState(() {});
+        _videoController!.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feed = Provider.of<FeedProvider>(context);
+    videoPosts = feed.videoPosts;
+    if (videoPosts.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text('ریلز')),
+        body: Center(child: Text('ویدئویی وجود ندارد')),
+      );
+    }
+    return Scaffold(
+      body: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        itemCount: videoPosts.length,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+            _initVideoController(index);
+          });
+        },
+        itemBuilder: (context, index) {
+          final post = videoPosts[index];
+          final isCurrent = index == _currentIndex;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (_videoController != null && isCurrent && _videoController!.value.isInitialized)
+                VideoPlayer(_videoController!)
+              else
+                CachedNetworkImage(
+                  imageUrl: post.thumbnailUrl ?? post.mediaUrl,
+                  fit: BoxFit.cover,
+                ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black54],
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 30,
+                left: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundImage: post.user.avatar != null
+                              ? CachedNetworkImageProvider(post.user.avatar!)
+                              : null,
+                          child: post.user.avatar == null ? Icon(Icons.person) : null,
+                        ),
+                        SizedBox(width: 8),
+                        Text(post.user.username, style: TextStyle(color: Colors.white)),
+                        if (post.user.isVerified)
+                          Icon(Icons.verified, color: Colors.blue, size: 16),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text(post.caption ?? '', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+              Positioned(
+                bottom: 30,
+                right: 10,
+                child: Column(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        post.likedByUser ? Icons.favorite : Icons.favorite_border,
+                        color: post.likedByUser ? Colors.red : Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () async {
+                        try {
+                          final liked = await ApiService().likePost(post.id);
+                          feed.updatePost(Post(
+                            id: post.id,
+                            caption: post.caption,
+                            mediaUrl: post.mediaUrl,
+                            thumbnailUrl: post.thumbnailUrl,
+                            mediaType: post.mediaType,
+                            createdAt: post.createdAt,
+                            user: post.user,
+                            likesCount: post.likesCount + (liked ? 1 : -1),
+                            commentsCount: post.commentsCount,
+                            savesCount: post.savesCount,
+                            likedByUser: liked,
+                            savedByUser: post.savedByUser,
+                            comments: post.comments,
+                          ));
+                        } catch (e) {}
+                      },
+                    ),
+                    Text('${post.likesCount}', style: TextStyle(color: Colors.white)),
+                    IconButton(
+                      icon: Icon(Icons.comment, color: Colors.white, size: 30),
+                      onPressed: () => _showComments(context, post),
+                    ),
+                    Text('${post.commentsCount}', style: TextStyle(color: Colors.white)),
+                    IconButton(
+                      icon: Icon(
+                        post.savedByUser ? Icons.bookmark : Icons.bookmark_border,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () async {
+                        try {
+                          final saved = await ApiService().savePost(post.id);
+                          feed.updatePost(Post(
+                            id: post.id,
+                            caption: post.caption,
+                            mediaUrl: post.mediaUrl,
+                            thumbnailUrl: post.thumbnailUrl,
+                            mediaType: post.mediaType,
+                            createdAt: post.createdAt,
+                            user: post.user,
+                            likesCount: post.likesCount,
+                            commentsCount: post.commentsCount,
+                            savesCount: post.savesCount + (saved ? 1 : -1),
+                            likedByUser: post.likedByUser,
+                            savedByUser: saved,
+                            comments: post.comments,
+                          ));
+                        } catch (e) {}
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showComments(BuildContext context, Post post) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(8),
+              child: Text('نظرات', style: TextStyle(fontSize: 18)),
+            ),
+            Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: post.comments.length,
+                itemBuilder: (ctx, i) {
+                  final c = post.comments[i];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: c.user.avatar != null
+                          ? CachedNetworkImageProvider(c.user.avatar!)
+                          : null,
+                      child: c.user.avatar == null ? Icon(Icons.person) : null,
+                    ),
+                    title: Row(
+                      children: [
+                        Text(c.user.fullName),
+                        if (c.user.isVerified) Icon(Icons.verified, color: Colors.blue, size: 16),
+                      ],
+                    ),
+                    subtitle: Text(c.content),
+                    trailing: Text(DateFormat.yMd().add_jm().format(c.createdAt)),
+                  );
+                },
+              ),
+            ),
+            Divider(),
+            Padding(
+              padding: EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: InputDecoration(hintText: 'نظر خود را بنویسید...'),
+                      onSubmitted: (value) async {
+                        if (value.isNotEmpty) {
+                          try {
+                            final newComment = await ApiService().commentPost(post.id, value);
+                            // بروزرسانی پست
+                          } catch (e) {}
+                          Navigator.pop(ctx);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// صفحه پست تکی
 class PostDetailScreen extends StatefulWidget {
   final Post? post;
   final int? postId;
@@ -908,9 +1223,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       Expanded(
                         child: TextField(
                           controller: _commentController,
-                          decoration: InputDecoration(
-                            hintText: 'نظر خود را بنویسید...',
-                          ),
+                          decoration: InputDecoration(hintText: 'نظر خود را بنویسید...'),
                         ),
                       ),
                       IconButton(
@@ -967,7 +1280,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 }
 
-// Create Post Screen
+// صفحه ایجاد پست
 class CreatePostScreen extends StatefulWidget {
   @override
   _CreatePostScreenState createState() => _CreatePostScreenState();
@@ -1058,7 +1371,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     try {
       final post = await ApiService()
           .createPost(_captionController.text, _mediaFile!, _mediaType!);
-      // Refresh feed
       Provider.of<FeedProvider>(context, listen: false).loadFeed();
       Navigator.pop(context);
     } catch (e) {
@@ -1108,7 +1420,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 }
 
-// Profile Screen
+// صفحه پروفایل
 class ProfileScreen extends StatefulWidget {
   final String username;
   const ProfileScreen({Key? key, required this.username}) : super(key: key);
@@ -1122,8 +1434,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ProfileProvider>(context, listen: false)
-          .loadProfile(widget.username);
+      Provider.of<ProfileProvider>(context, listen: false).loadProfile(widget.username);
     });
   }
 
@@ -1132,6 +1443,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = Provider.of<ProfileProvider>(context);
     final auth = Provider.of<AuthProvider>(context);
     final isOwnProfile = auth.user?.username == widget.username;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('پروفایل'),
@@ -1149,7 +1461,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? Center(child: Text('کاربر یافت نشد'))
               : ListView(
                   children: [
-                    // Profile header
                     Padding(
                       padding: EdgeInsets.all(16),
                       child: Column(
@@ -1192,8 +1503,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       .adminVerify(profile.profileUser!.username, value);
                                   profile.loadProfile(widget.username);
                                 } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(e.toString())));
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(SnackBar(content: Text(e.toString())));
                                 }
                               },
                             ),
@@ -1201,7 +1512,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     Divider(),
-                    // Posts grid
                     GridView.builder(
                       shrinkWrap: true,
                       physics: NeverScrollableScrollPhysics(),
@@ -1214,8 +1524,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       itemBuilder: (ctx, i) {
                         final p = profile.posts[i];
                         return GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/post/${p.id}',
-                              arguments: p),
+                          onTap: () => Navigator.pushNamed(context, '/post/${p.id}', arguments: p),
                           child: CachedNetworkImage(
                             imageUrl: p.thumbnailUrl ?? p.mediaUrl,
                             fit: BoxFit.cover,
@@ -1229,7 +1538,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// Edit Profile Screen (avatar upload)
+// صفحه ویرایش پروفایل (آواتار)
 class EditProfileScreen extends StatefulWidget {
   @override
   _EditProfileScreenState createState() => _EditProfileScreenState();
@@ -1249,7 +1558,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // Getter برای تعیین ImageProvider به صورت type-safe
   ImageProvider? get _avatarImage {
     if (_avatarFile != null) return FileImage(_avatarFile!);
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -1285,7 +1593,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             CircleAvatar(
               radius: 60,
-              backgroundImage: _avatarImage, // استفاده از getter
+              backgroundImage: _avatarImage,
               child: _avatarFile == null && auth.user?.avatar == null
                   ? Icon(Icons.person, size: 60)
                   : null,
@@ -1314,7 +1622,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthProvider();
-  await auth._loadStoredData(); // load token before app starts
+  await auth._loadStoredData();
   runApp(MyApp(auth: auth));
 }
 
