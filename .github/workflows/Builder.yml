@@ -1,0 +1,67 @@
+name: Flutter Android Build + Push to Repo
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.14.0
+        with:
+          flutter-version: '3.x'
+          channel: stable
+          cache: true
+
+      - name: Check if Flutter project exists
+        id: check_project
+        run: |
+          if [ -f "pubspec.yaml" ]; then
+            echo "Project exists. Skipping creation."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Project not found. Will create new Flutter project."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create new Flutter project
+        if: steps.check_project.outputs.exists == 'false'
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          PROJECT_NAME=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/^[0-9]/_/')
+          [ -z "$PROJECT_NAME" ] && PROJECT_NAME="my_flutter_app"
+          echo "Creating Flutter project: $PROJECT_NAME"
+          flutter create --org com.example.app --project-name "$PROJECT_NAME" .
+
+      - name: Commit and push new Flutter project to repository
+        if: steps.check_project.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "🚀 Initialize Flutter project via GitHub Actions"
+          git push
+
+      - name: Install dependencies
+        run: flutter pub get
+
+
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
