@@ -1,1583 +1,1114 @@
+// main.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';  // اضافه شد
+import 'package:dio/dio.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 
-// ------------------- Models -------------------
+// -------------------- Models --------------------
 class User {
   final int id;
   final String username;
-  final String fullName;
-  final String? bio;
+  final String bio;
   final String? avatar;
-  final bool isVerified;
+  final bool isBlue;
   final bool isAdmin;
-  final int postsCount;
+  final DateTime createdAt;
 
   User({
     required this.id,
     required this.username,
-    required this.fullName,
-    this.bio,
+    required this.bio,
     this.avatar,
-    required this.isVerified,
+    required this.isBlue,
     required this.isAdmin,
-    required this.postsCount,
+    required this.createdAt,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'],
       username: json['username'],
-      fullName: json['full_name'],
-      bio: json['bio'],
+      bio: json['bio'] ?? '',
       avatar: json['avatar'],
-      isVerified: json['is_verified'] ?? false,
+      isBlue: json['is_blue'] ?? false,
       isAdmin: json['is_admin'] ?? false,
-      postsCount: json['posts_count'] ?? 0,
+      createdAt: DateTime.parse(json['created_at']),
     );
   }
+}
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'full_name': fullName,
-        'bio': bio,
-        'avatar': avatar,
-        'is_verified': isVerified,
-        'is_admin': isAdmin,
-        'posts_count': postsCount,
-      };
+class Reel {
+  final int id;
+  final String type; // 'image' or 'video'
+  final String caption;
+  final String fileUrl;
+  final DateTime createdAt;
+  final User user;
+  final int likesCount;
+  final int commentsCount;
+  final bool isLiked;
+
+  Reel({
+    required this.id,
+    required this.type,
+    required this.caption,
+    required this.fileUrl,
+    required this.createdAt,
+    required this.user,
+    required this.likesCount,
+    required this.commentsCount,
+    required this.isLiked,
+  });
+
+  factory Reel.fromJson(Map<String, dynamic> json) {
+    return Reel(
+      id: json['id'],
+      type: json['type'],
+      caption: json['caption'] ?? '',
+      fileUrl: json['file_url'],
+      createdAt: DateTime.parse(json['created_at']),
+      user: User(
+        id: json['user']['id'],
+        username: json['user']['username'],
+        bio: '', // not provided in reel response
+        avatar: json['user']['avatar'],
+        isBlue: json['user']['is_blue'] ?? false,
+        isAdmin: false,
+        createdAt: DateTime.now(), // not provided
+      ),
+      likesCount: json['likes_count'],
+      commentsCount: json['comments_count'],
+      isLiked: json['isLiked'] ?? false,
+    );
+  }
 }
 
 class Comment {
   final int id;
-  final User user;
-  final String content;
+  final String text;
   final DateTime createdAt;
+  final User user;
 
   Comment({
     required this.id,
-    required this.user,
-    required this.content,
+    required this.text,
     required this.createdAt,
+    required this.user,
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) {
     return Comment(
       id: json['id'],
-      user: User.fromJson(json['user']),
-      content: json['content'],
+      text: json['text'],
       createdAt: DateTime.parse(json['created_at']),
+      user: User(
+        id: json['user']['id'],
+        username: json['user']['username'],
+        bio: '',
+        avatar: json['user']['avatar'],
+        isBlue: json['user']['is_blue'] ?? false,
+        isAdmin: false,
+        createdAt: DateTime.now(),
+      ),
     );
   }
 }
 
-class Post {
-  final int id;
-  final String? caption;
-  final String mediaUrl;
-  final String? thumbnailUrl;
-  final String mediaType;
-  final DateTime createdAt;
-  final User user;
-  final int likesCount;
-  final int commentsCount;
-  final int savesCount;
-  final bool likedByUser;
-  final bool savedByUser;
-  final List<Comment> comments;
-
-  Post({
-    required this.id,
-    this.caption,
-    required this.mediaUrl,
-    this.thumbnailUrl,
-    required this.mediaType,
-    required this.createdAt,
-    required this.user,
-    required this.likesCount,
-    required this.commentsCount,
-    required this.savesCount,
-    required this.likedByUser,
-    required this.savedByUser,
-    required this.comments,
-  });
-
-  factory Post.fromJson(Map<String, dynamic> json) {
-    return Post(
-      id: json['id'],
-      caption: json['caption'],
-      mediaUrl: json['media_url'],
-      thumbnailUrl: json['thumbnail_url'],
-      mediaType: json['media_type'],
-      createdAt: DateTime.parse(json['created_at']),
-      user: User.fromJson(json['user']),
-      likesCount: json['likes_count'],
-      commentsCount: json['comments_count'],
-      savesCount: json['saves_count'],
-      likedByUser: json['liked_by_user'] ?? false,
-      savedByUser: json['saved_by_user'] ?? false,
-      comments: (json['comments'] as List)
-          .map((c) => Comment.fromJson(c))
-          .toList(),
-    );
-  }
-}
-
-// ------------------- API Service (با نادیده گرفتن گواهی SSL) -------------------
+// -------------------- API Service --------------------
 class ApiService {
-  static const String baseUrl = 'https://api-tweeter.runflare.run';
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
-  ApiService._internal();
+  late Dio dio;
+  late CookieJar cookieJar;
+  static const baseUrl = 'https://api-tweeter.runflare.run';
 
-  String? _token;
-  final HttpClient _httpClient = HttpClient()
-    ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-
-  http.Client get _client => IOClient(_httpClient);  // حالا IOClient شناسایی می‌شود
-
-  void setToken(String token) {
-    _token = token;
+  ApiService._internal() {
+    dio = Dio(BaseOptions(baseUrl: baseUrl));
+    _initCookieJar();
   }
 
-  void clearToken() {
-    _token = null;
-  }
-
-  Future<Map<String, String>> _headers() async {
-    return {
-      'Content-Type': 'application/json',
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    };
+  _initCookieJar() async {
+    final dir = await getApplicationDocumentsDirectory();
+    cookieJar = PersistCookieJar(
+      storage: FileStorage(dir.path + '/.cookies/'),
+    );
+    dio.interceptors.add(CookieManager(cookieJar));
   }
 
   // Auth
-  Future<Map<String, dynamic>> register(
-      String username, String password, String fullName, String bio) async {
-    final client = _client;
+  Future<Map<String, dynamic>> register(String username, String password) async {
     try {
-      final response = await client.post(
-        Uri.parse('$baseUrl/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-          'full_name': fullName,
-          'bio': bio,
-        }),
-      );
-      if (response.statusCode == 201) {
-        return jsonDecode(response.body);
-      } else {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ثبت‌نام');
-      }
-    } finally {
-      client.close();
+      final response = await dio.post('/register', data: {'username': username, 'password': password});
+      return response.data;
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final client = _client;
     try {
-      final response = await client.post(
-        Uri.parse('$baseUrl/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': username, 'password': password}),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ورود');
-      }
-    } finally {
-      client.close();
+      final response = await dio.post('/login', data: {'username': username, 'password': password});
+      return response.data;
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Feed
-  Future<List<Post>> getFeed() async {
-    final client = _client;
+  Future<Map<String, dynamic>> logout() async {
     try {
-      final response = await client.get(
-        Uri.parse('$baseUrl/feed'),
-        headers: await _headers(),
-      );
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((p) => Post.fromJson(p)).toList();
-      } else {
-        throw Exception('خطا در دریافت فید');
-      }
-    } finally {
-      client.close();
+      final response = await dio.post('/logout');
+      return response.data;
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Post detail
-  Future<Post> getPost(int postId) async {
-    final client = _client;
+  Future<User> getProfile() async {
     try {
-      final response = await client.get(
-        Uri.parse('$baseUrl/post/$postId'),
-        headers: await _headers(),
-      );
-      if (response.statusCode == 200) {
-        return Post.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception('خطا در دریافت پست');
-      }
-    } finally {
-      client.close();
+      final response = await dio.get('/profile');
+      return User.fromJson(response.data);
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Like
-  Future<bool> likePost(int postId) async {
-    final client = _client;
+  Future<void> updateProfile({String? bio}) async {
     try {
-      final response = await client.post(
-        Uri.parse('$baseUrl/post/$postId/like'),
-        headers: await _headers(),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(response.body)['liked'];
-      } else {
-        throw Exception('خطا در لایک');
-      }
-    } finally {
-      client.close();
+      await dio.put('/profile', data: {'bio': bio});
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Comment
-  Future<Comment> commentPost(int postId, String content) async {
-    final client = _client;
+  Future<String> uploadAvatar(File image) async {
     try {
-      final response = await client.post(
-        Uri.parse('$baseUrl/post/$postId/comment'),
-        headers: await _headers(),
-        body: jsonEncode({'content': content}),
-      );
-      if (response.statusCode == 201) {
-        return Comment.fromJson(jsonDecode(response.body)['comment']);
-      } else {
-        throw Exception('خطا در ارسال کامنت');
-      }
-    } finally {
-      client.close();
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(image.path, filename: image.path.split('/').last),
+      });
+      final response = await dio.post('/avatar', data: formData);
+      return response.data['avatar_url'];
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Save
-  Future<bool> savePost(int postId) async {
-    final client = _client;
+  // Reels
+  Future<Map<String, dynamic>> fetchReels({int page = 1, int perPage = 10}) async {
     try {
-      final response = await client.post(
-        Uri.parse('$baseUrl/post/$postId/save'),
-        headers: await _headers(),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(response.body)['saved'];
-      } else {
-        throw Exception('خطا در ذخیره');
-      }
-    } finally {
-      client.close();
+      final response = await dio.get('/api/reels', queryParameters: {'page': page, 'per_page': perPage});
+      return response.data;
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Create post
-  Future<Post> createPost(String caption, File mediaFile, String mediaType) async {
-    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/post'));
-    request.headers.addAll(await _headers());
-    request.fields['caption'] = caption;
-    request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path));
-    final client = _client;
+  Future<Reel> getReel(int id) async {
     try {
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-      if (response.statusCode == 201) {
-        return Post.fromJson(jsonDecode(response.body)['post']);
-      } else {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در ایجاد پست');
-      }
-    } finally {
-      client.close();
+      final response = await dio.get('/api/reels/$id');
+      return Reel.fromJson(response.data);
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Upload avatar
-  Future<String> uploadAvatar(File avatarFile) async {
-    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/user/avatar'));
-    request.headers.addAll(await _headers());
-    request.files.add(await http.MultipartFile.fromPath('avatar', avatarFile.path));
-    final client = _client;
+  Future<Map<String, dynamic>> toggleLike(int reelId) async {
     try {
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body)['avatar_url'];
-      } else {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در آپلود آواتار');
-      }
-    } finally {
-      client.close();
+      final response = await dio.post('/api/reels/$reelId/like');
+      return response.data;
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Get user profile
-  Future<Map<String, dynamic>> getUserProfile(String username) async {
-    final client = _client;
+  Future<List<Comment>> getComments(int reelId) async {
     try {
-      final response = await client.get(
-        Uri.parse('$baseUrl/user/$username'),
-        headers: await _headers(),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        throw Exception('خطا در دریافت پروفایل');
-      }
-    } finally {
-      client.close();
+      final response = await dio.get('/api/reels/$reelId/comments');
+      return (response.data as List).map((c) => Comment.fromJson(c)).toList();
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
   }
 
-  // Admin verify
-  Future<void> adminVerify(String username, bool verified) async {
-    final client = _client;
+  Future<Comment> postComment(int reelId, String text) async {
     try {
-      final response = await client.put(
-        Uri.parse('$baseUrl/admin/verify/$username'),
-        headers: await _headers(),
-        body: jsonEncode({'verified': verified}),
-      );
-      if (response.statusCode != 200) {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'خطا در تغییر تیک آبی');
-      }
-    } finally {
-      client.close();
+      final response = await dio.post('/api/reels/$reelId/comments', data: {'text': text});
+      return Comment.fromJson(response.data);
+    } on DioError catch (e) {
+      throw _handleError(e);
     }
+  }
+
+  Future<Reel> createReel(File file, String caption) async {
+    try {
+      String fileName = file.path.split('/').last;
+      String ext = fileName.split('.').last.toLowerCase();
+      String type = (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif') ? 'image' : 'video';
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(file.path, filename: fileName),
+        'caption': caption,
+      });
+      final response = await dio.post('/api/reels', data: formData);
+      // after creation, fetch the reel details
+      return await getReel(response.data['reel_id']);
+    } on DioError catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  String _handleError(DioError e) {
+    if (e.response != null) {
+      final data = e.response!.data;
+      if (data is Map && data.containsKey('error')) {
+        return data['error'];
+      }
+      return 'Server error: ${e.response!.statusCode}';
+    }
+    return 'Network error: ${e.message}';
   }
 }
 
-// ------------------- Providers -------------------
+// -------------------- Providers --------------------
 class AuthProvider extends ChangeNotifier {
   User? _user;
-  String? _token;
   bool _isLoading = false;
+  String? _error;
 
   User? get user => _user;
-  String? get token => _token;
   bool get isLoading => _isLoading;
+  String? get error => _error;
   bool get isLoggedIn => _user != null;
 
-  AuthProvider() {
-    _loadStoredData();
-  }
+  final ApiService _api = ApiService();
 
-  Future<void> _loadStoredData() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('token');
-    final userJson = prefs.getString('user');
-    if (_token != null && userJson != null) {
-      _user = User.fromJson(jsonDecode(userJson));
-      ApiService().setToken(_token!);
+  Future<bool> register(String username, String password) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _api.register(username, password);
+      // بعد از ثبت‌نام، لاگین کن
+      return await login(username, password);
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
       notifyListeners();
+      return false;
     }
   }
 
-  Future<void> login(String username, String password) async {
+  Future<bool> login(String username, String password) async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
     try {
-      final data = await ApiService().login(username, password);
-      _token = data['access_token'];
-      _user = User.fromJson(data['user']);
-      ApiService().setToken(_token!);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', _token!);
-      await prefs.setString('user', jsonEncode(_user!.toJson()));
-    } finally {
+      await _api.login(username, password);
+      await loadProfile();
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  Future<void> register(String username, String password, String fullName, String bio) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await ApiService().register(username, password, fullName, bio);
-      await login(username, password);
-    } finally {
+      return true;
+    } catch (e) {
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
+      return false;
     }
   }
 
   Future<void> logout() async {
-    _user = null;
-    _token = null;
-    ApiService().clearToken();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    await prefs.remove('user');
+    _isLoading = true;
     notifyListeners();
-  }
-
-  Future<void> updateAvatar(String avatarUrl) async {
-    if (_user != null) {
-      _user = User(
-        id: _user!.id,
-        username: _user!.username,
-        fullName: _user!.fullName,
-        bio: _user!.bio,
-        avatar: avatarUrl,
-        isVerified: _user!.isVerified,
-        isAdmin: _user!.isAdmin,
-        postsCount: _user!.postsCount,
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user', jsonEncode(_user!.toJson()));
+    try {
+      await _api.logout();
+      _user = null;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> refreshUser() async {
-    if (_user != null) {
-      try {
-        final data = await ApiService().getUserProfile(_user!.username);
-        _user = User.fromJson({
-          ...data,
-          'is_admin': _user!.isAdmin,
-        });
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user', jsonEncode(_user!.toJson()));
+  Future<void> loadProfile() async {
+    try {
+      _user = await _api.getProfile();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateBio(String bio) async {
+    try {
+      await _api.updateProfile(bio: bio);
+      await loadProfile(); // reload
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<String?> uploadAvatar(File image) async {
+    try {
+      final url = await _api.uploadAvatar(image);
+      await loadProfile(); // reload to get new avatar
+      return url;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+}
+
+class ReelsProvider extends ChangeNotifier {
+  List<Reel> _reels = [];
+  int _currentPage = 1;
+  int _totalPages = 1;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  String? _error;
+
+  List<Reel> get reels => _reels;
+  bool get isLoading => _isLoading;
+  bool get hasMore => _hasMore;
+  String? get error => _error;
+
+  final ApiService _api = ApiService();
+
+  Future<void> fetchReels({bool refresh = false}) async {
+    if (refresh) {
+      _currentPage = 1;
+      _hasMore = true;
+      _reels.clear();
+    }
+    if (!_hasMore || _isLoading) return;
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final data = await _api.fetchReels(page: _currentPage);
+      final List<Reel> newReels = (data['items'] as List).map((r) => Reel.fromJson(r)).toList();
+      _reels.addAll(newReels);
+      _totalPages = data['pages'];
+      _currentPage++;
+      _hasMore = _currentPage <= _totalPages;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleLike(int reelId) async {
+    try {
+      final result = await _api.toggleLike(reelId);
+      // update local reel
+      final index = _reels.indexWhere((r) => r.id == reelId);
+      if (index != -1) {
+        final old = _reels[index];
+        _reels[index] = Reel(
+          id: old.id,
+          type: old.type,
+          caption: old.caption,
+          fileUrl: old.fileUrl,
+          createdAt: old.createdAt,
+          user: old.user,
+          likesCount: result['likes_count'],
+          commentsCount: old.commentsCount,
+          isLiked: result['liked'],
+        );
         notifyListeners();
-      } catch (e) {}
-    }
-  }
-}
-
-class FeedProvider extends ChangeNotifier {
-  List<Post> _posts = [];
-  bool _isLoading = false;
-
-  List<Post> get posts => _posts;
-  bool get isLoading => _isLoading;
-  List<Post> get videoPosts => _posts.where((p) => p.mediaType == 'video').toList();
-
-  Future<void> loadFeed() async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      _posts = await ApiService().getFeed();
-    } catch (e) {
-      print(e);
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  void updatePost(Post updatedPost) {
-    final index = _posts.indexWhere((p) => p.id == updatedPost.id);
-    if (index != -1) {
-      _posts[index] = updatedPost;
-      notifyListeners();
-    }
-  }
-}
-
-class ProfileProvider extends ChangeNotifier {
-  User? _profileUser;
-  List<Post> _posts = [];
-  bool _isLoading = false;
-
-  User? get profileUser => _profileUser;
-  List<Post> get posts => _posts;
-  bool get isLoading => _isLoading;
-
-  Future<void> loadProfile(String username) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      final data = await ApiService().getUserProfile(username);
-      _profileUser = User.fromJson(data);
-      _posts = (data['posts'] as List).map((p) => Post.fromJson(p)).toList();
-    } catch (e) {
-      print(e);
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  void clear() {
-    _profileUser = null;
-    _posts = [];
-    notifyListeners();
-  }
-}
-
-// ------------------- Screens -------------------
-// Login Screen
-class LoginScreen extends StatefulWidget {
-  @override
-  _LoginScreenState createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    return Scaffold(
-      appBar: AppBar(title: Text('ورود')),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _usernameController,
-                decoration: InputDecoration(labelText: 'نام کاربری'),
-                validator: (v) => v!.isEmpty ? 'اجباری' : null,
-              ),
-              TextFormField(
-                controller: _passwordController,
-                decoration: InputDecoration(labelText: 'رمز عبور'),
-                obscureText: true,
-                validator: (v) => v!.isEmpty ? 'اجباری' : null,
-              ),
-              SizedBox(height: 20),
-              if (auth.isLoading)
-                CircularProgressIndicator()
-              else
-                ElevatedButton(
-                  onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      try {
-                        await auth.login(_usernameController.text, _passwordController.text);
-                        Navigator.pushReplacementNamed(context, '/home');
-                      } catch (e) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text(e.toString())));
-                      }
-                    }
-                  },
-                  child: Text('ورود'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pushNamed(context, '/register'),
-                child: Text('ثبت‌نام'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Register Screen
-class RegisterScreen extends StatefulWidget {
-  @override
-  _RegisterScreenState createState() => _RegisterScreenState();
-}
-
-class _RegisterScreenState extends State<RegisterScreen> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _fullNameController = TextEditingController();
-  final _bioController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    return Scaffold(
-      appBar: AppBar(title: Text('ثبت‌نام')),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _usernameController,
-                decoration: InputDecoration(labelText: 'نام کاربری'),
-                validator: (v) => v!.isEmpty ? 'اجباری' : null,
-              ),
-              TextFormField(
-                controller: _passwordController,
-                decoration: InputDecoration(labelText: 'رمز عبور'),
-                obscureText: true,
-                validator: (v) => v!.isEmpty ? 'اجباری' : null,
-              ),
-              TextFormField(
-                controller: _fullNameController,
-                decoration: InputDecoration(labelText: 'نام کامل'),
-                validator: (v) => v!.isEmpty ? 'اجباری' : null,
-              ),
-              TextFormField(
-                controller: _bioController,
-                decoration: InputDecoration(labelText: 'بیوگرافی'),
-                maxLines: 3,
-              ),
-              SizedBox(height: 20),
-              if (auth.isLoading)
-                CircularProgressIndicator()
-              else
-                ElevatedButton(
-                  onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      try {
-                        await auth.register(
-                            _usernameController.text,
-                            _passwordController.text,
-                            _fullNameController.text,
-                            _bioController.text);
-                        Navigator.pushReplacementNamed(context, '/home');
-                      } catch (e) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text(e.toString())));
-                      }
-                    }
-                  },
-                  child: Text('ثبت‌نام'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('قبلاً ثبت‌نام کرده‌ام'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// صفحه اصلی با BottomNavigationBar
-class HomeScreen extends StatefulWidget {
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
-
-  final List<Widget> _tabs = [
-    FeedTab(),
-    ReelsScreen(),
-    ProfileTab(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
-          BottomNavigationBarItem(icon: Icon(Icons.video_library), label: 'ریلز'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'پروفایل'),
-        ],
-      ),
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              onPressed: () => Navigator.pushNamed(context, '/create_post'),
-              child: Icon(Icons.add),
-            )
-          : null,
-    );
-  }
-}
-
-// تب فید
-class FeedTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final feed = Provider.of<FeedProvider>(context);
-    return Scaffold(
-      appBar: AppBar(title: Text('خانه')),
-      body: feed.isLoading
-          ? Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: feed.posts.length,
-              itemBuilder: (ctx, i) => PostWidget(post: feed.posts[i]),
-            ),
-    );
-  }
-}
-
-// تب پروفایل کاربر فعلی
-class ProfileTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    return ProfileScreen(username: auth.user!.username);
-  }
-}
-
-// ویجت پست در فید
-class PostWidget extends StatelessWidget {
-  final Post post;
-
-  const PostWidget({Key? key, required this.post}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            leading: CircleAvatar(
-              backgroundImage: post.user.avatar != null
-                  ? CachedNetworkImageProvider(post.user.avatar!)
-                  : null,
-              child: post.user.avatar == null ? Icon(Icons.person) : null,
-            ),
-            title: Row(
-              children: [
-                Text(post.user.fullName),
-                if (post.user.isVerified)
-                  Icon(Icons.verified, color: Colors.blue, size: 16),
-              ],
-            ),
-            subtitle: Text('@${post.user.username}'),
-            onTap: () => Navigator.pushNamed(context, '/profile',
-                arguments: post.user.username),
-          ),
-          GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/post/${post.id}', arguments: post),
-            child: post.mediaType == 'image'
-                ? CachedNetworkImage(imageUrl: post.mediaUrl)
-                : AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: VideoPlayerWidget(url: post.mediaUrl, autoPlay: false),
-                  ),
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(
-                  post.likedByUser ? Icons.favorite : Icons.favorite_border,
-                  color: post.likedByUser ? Colors.red : null,
-                ),
-                onPressed: () async {
-                  try {
-                    final liked = await ApiService().likePost(post.id);
-                    final feed = Provider.of<FeedProvider>(context, listen: false);
-                    final updatedPost = Post(
-                      id: post.id,
-                      caption: post.caption,
-                      mediaUrl: post.mediaUrl,
-                      thumbnailUrl: post.thumbnailUrl,
-                      mediaType: post.mediaType,
-                      createdAt: post.createdAt,
-                      user: post.user,
-                      likesCount: post.likesCount + (liked ? 1 : -1),
-                      commentsCount: post.commentsCount,
-                      savesCount: post.savesCount,
-                      likedByUser: liked,
-                      savedByUser: post.savedByUser,
-                      comments: post.comments,
-                    );
-                    feed.updatePost(updatedPost);
-                  } catch (e) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                },
-              ),
-              Text('${post.likesCount}'),
-              IconButton(
-                icon: Icon(Icons.comment),
-                onPressed: () => Navigator.pushNamed(context, '/post/${post.id}', arguments: post),
-              ),
-              Text('${post.commentsCount}'),
-              IconButton(
-                icon: Icon(post.savedByUser ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: () async {
-                  try {
-                    final saved = await ApiService().savePost(post.id);
-                    final feed = Provider.of<FeedProvider>(context, listen: false);
-                    final updatedPost = Post(
-                      id: post.id,
-                      caption: post.caption,
-                      mediaUrl: post.mediaUrl,
-                      thumbnailUrl: post.thumbnailUrl,
-                      mediaType: post.mediaType,
-                      createdAt: post.createdAt,
-                      user: post.user,
-                      likesCount: post.likesCount,
-                      commentsCount: post.commentsCount,
-                      savesCount: post.savesCount + (saved ? 1 : -1),
-                      likedByUser: post.likedByUser,
-                      savedByUser: saved,
-                      comments: post.comments,
-                    );
-                    feed.updatePost(updatedPost);
-                  } catch (e) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                },
-              ),
-              Text('${post.savesCount}'),
-            ],
-          ),
-          if (post.caption != null && post.caption!.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.all(8),
-              child: Text(post.caption!),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ویجت ویدئو پلیر
-class VideoPlayerWidget extends StatefulWidget {
-  final String url;
-  final bool autoPlay;
-
-  const VideoPlayerWidget({Key? key, required this.url, this.autoPlay = false}) : super(key: key);
-
-  @override
-  _VideoPlayerWidgetState createState() => _VideoPlayerWidgetState();
-}
-
-class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
-  late VideoPlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.network(widget.url)
-      ..initialize().then((_) {
-        setState(() {});
-        if (widget.autoPlay) {
-          _controller.play();
-        }
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return Center(child: CircularProgressIndicator());
-    }
-    return AspectRatio(
-      aspectRatio: _controller.value.aspectRatio,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          VideoPlayer(_controller),
-          IconButton(
-            icon: Icon(
-              _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-              color: Colors.white,
-              size: 50,
-            ),
-            onPressed: () {
-              setState(() {
-                _controller.value.isPlaying ? _controller.pause() : _controller.play();
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// صفحه Reels
-class ReelsScreen extends StatefulWidget {
-  @override
-  _ReelsScreenState createState() => _ReelsScreenState();
-}
-
-class _ReelsScreenState extends State<ReelsScreen> {
-  late PageController _pageController;
-  int _currentIndex = 0;
-  VideoPlayerController? _videoController;
-  List<Post> videoPosts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final feed = Provider.of<FeedProvider>(context, listen: false);
-      videoPosts = feed.videoPosts;
-      if (videoPosts.isNotEmpty) {
-        _initVideoController(0);
       }
-    });
+    } catch (e) {
+      // ignore error for now
+    }
+  }
+}
+
+class CommentsProvider extends ChangeNotifier {
+  List<Comment> _comments = [];
+  bool _isLoading = false;
+  String? _error;
+
+  List<Comment> get comments => _comments;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  final ApiService _api = ApiService();
+
+  Future<void> fetchComments(int reelId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      _comments = await _api.getComments(reelId);
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  void _initVideoController(int index) async {
-    if (videoPosts.isEmpty) return;
-    _videoController?.dispose();
-    final url = videoPosts[index].mediaUrl;
-    _videoController = VideoPlayerController.network(url)
-      ..initialize().then((_) {
-        setState(() {});
-        _videoController!.play();
+  Future<void> addComment(int reelId, String text) async {
+    try {
+      final newComment = await _api.postComment(reelId, text);
+      _comments.insert(0, newComment);
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+}
+
+// -------------------- Main App --------------------
+void main() {
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ChangeNotifierProvider(create: (_) => ReelsProvider()),
+      ChangeNotifierProvider(create: (_) => CommentsProvider()),
+    ],
+    child: const MyApp(),
+  ));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Instagram Reels Clone',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        primaryColor: Colors.white,
+      ),
+      home: Consumer<AuthProvider>(
+        builder: (context, auth, _) {
+          if (auth.isLoggedIn) {
+            return const ReelsPage();
+          }
+          return const LoginPage();
+        },
+      ),
+    );
+  }
+}
+
+// -------------------- Login & Register --------------------
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLogin = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Instagram Reels',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 40),
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(labelText: 'Username'),
+                    validator: (v) => v!.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: (v) => v!.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 30),
+                  if (auth.isLoading) const CircularProgressIndicator(),
+                  if (!auth.isLoading)
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (_formKey.currentState!.validate()) {
+                          bool success;
+                          if (_isLogin) {
+                            success = await auth.login(_usernameController.text, _passwordController.text);
+                          } else {
+                            success = await auth.register(_usernameController.text, _passwordController.text);
+                          }
+                          if (!success && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(auth.error ?? 'Error')),
+                            );
+                          }
+                        }
+                      },
+                      child: Text(_isLogin ? 'Login' : 'Register'),
+                    ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLogin = !_isLogin;
+                      });
+                    },
+                    child: Text(_isLogin ? 'Need an account? Register' : 'Already have an account? Login'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -------------------- Reels Page --------------------
+class ReelsPage extends StatefulWidget {
+  const ReelsPage({super.key});
+
+  @override
+  State<ReelsPage> createState() => _ReelsPageState();
+}
+
+class _ReelsPageState extends State<ReelsPage> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ReelsProvider>().fetchReels(refresh: true);
+    });
+    _pageController.addListener(_onPageChanged);
+  }
+
+  void _onPageChanged() {
+    final newIndex = _pageController.page?.round();
+    if (newIndex != null && newIndex != _currentIndex) {
+      setState(() {
+        _currentIndex = newIndex;
       });
+      // load more when near end
+      final provider = context.read<ReelsProvider>();
+      if (newIndex >= provider.reels.length - 3 && provider.hasMore) {
+        provider.fetchReels();
+      }
+    }
   }
 
   @override
   void dispose() {
+    _pageController.removeListener(_onPageChanged);
     _pageController.dispose();
-    _videoController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final feed = Provider.of<FeedProvider>(context);
-    videoPosts = feed.videoPosts;
-    if (videoPosts.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: Text('ریلز')),
-        body: Center(child: Text('ویدئویی وجود ندارد')),
-      );
-    }
     return Scaffold(
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        itemCount: videoPosts.length,
-        onPageChanged: (index) {
-          setState(() {
-            _currentIndex = index;
-            _initVideoController(index);
-          });
-        },
-        itemBuilder: (context, index) {
-          final post = videoPosts[index];
-          final isCurrent = index == _currentIndex;
+      body: Consumer<ReelsProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading && provider.reels.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (provider.error != null && provider.reels.isEmpty) {
+            return Center(child: Text('Error: ${provider.error}'));
+          }
           return Stack(
-            fit: StackFit.expand,
             children: [
-              if (_videoController != null && isCurrent && _videoController!.value.isInitialized)
-                VideoPlayer(_videoController!)
-              else
-                CachedNetworkImage(
-                  imageUrl: post.thumbnailUrl ?? post.mediaUrl,
-                  fit: BoxFit.cover,
-                ),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black54],
-                  ),
+              PageView.builder(
+                controller: _pageController,
+                scrollDirection: Axis.vertical,
+                itemCount: provider.reels.length,
+                itemBuilder: (context, index) {
+                  final reel = provider.reels[index];
+                  return ReelItem(
+                    reel: reel,
+                    isCurrent: index == _currentIndex,
+                    onLike: () => provider.toggleLike(reel.id),
+                    onComment: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CommentsPage(reelId: reel.id),
+                        ),
+                      ).then((_) => provider.fetchReels(refresh: true)); // refresh after comment
+                    },
+                  );
+                },
+              ),
+              Positioned(
+                top: 40,
+                left: 10,
+                child: IconButton(
+                  icon: const Icon(Icons.person, color: Colors.white, size: 30),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfilePage()),
+                    );
+                  },
                 ),
               ),
               Positioned(
-                bottom: 30,
-                left: 10,
+                top: 40,
+                right: 10,
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.white, size: 30),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CreateReelPage()),
+                    ).then((_) => provider.fetchReels(refresh: true));
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// -------------------- Reel Item --------------------
+class ReelItem extends StatefulWidget {
+  final Reel reel;
+  final bool isCurrent;
+  final VoidCallback onLike;
+  final VoidCallback onComment;
+
+  const ReelItem({
+    super.key,
+    required this.reel,
+    required this.isCurrent,
+    required this.onLike,
+    required this.onComment,
+  });
+
+  @override
+  State<ReelItem> createState() => _ReelItemState();
+}
+
+class _ReelItemState extends State<ReelItem> {
+  VideoPlayerController? _videoController;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.reel.type == 'video') {
+      _initializeVideo();
+    }
+  }
+
+  void _initializeVideo() {
+    _videoController = VideoPlayerController.network(widget.reel.fileUrl)
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _isInitialized = true);
+          if (widget.isCurrent) {
+            _videoController?.play();
+          }
+        }
+      }).catchError((e) {
+        print('Video error: $e');
+      });
+  }
+
+  @override
+  void didUpdateWidget(covariant ReelItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isCurrent != oldWidget.isCurrent) {
+      if (widget.isCurrent) {
+        _videoController?.play();
+      } else {
+        _videoController?.pause();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Media
+        if (widget.reel.type == 'image')
+          CachedNetworkImage(
+            imageUrl: widget.reel.fileUrl,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(color: Colors.grey[900]),
+            errorWidget: (_, __, ___) => const Center(child: Icon(Icons.error)),
+          )
+        else if (_isInitialized && _videoController != null)
+          VideoPlayer(_videoController!)
+        else
+          Container(color: Colors.black),
+
+        // Gradient overlay
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black54],
+            ),
+          ),
+        ),
+
+        // User info and actions
+        Positioned(
+          bottom: 30,
+          left: 10,
+          right: 10,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         CircleAvatar(
-                          backgroundImage: post.user.avatar != null
-                              ? CachedNetworkImageProvider(post.user.avatar!)
+                          radius: 20,
+                          backgroundImage: widget.reel.user.avatar != null
+                              ? CachedNetworkImageProvider(widget.reel.user.avatar!)
                               : null,
-                          child: post.user.avatar == null ? Icon(Icons.person) : null,
+                          child: widget.reel.user.avatar == null
+                              ? const Icon(Icons.person, color: Colors.white)
+                              : null,
                         ),
-                        SizedBox(width: 8),
-                        Text(post.user.username, style: TextStyle(color: Colors.white)),
-                        if (post.user.isVerified)
-                          Icon(Icons.verified, color: Colors.blue, size: 16),
+                        const SizedBox(width: 10),
+                        Text(
+                          widget.reel.user.username,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        if (widget.reel.user.isBlue)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(Icons.verified, color: Colors.blue, size: 16),
+                          ),
                       ],
                     ),
-                    SizedBox(height: 8),
-                    Text(post.caption ?? '', style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 8),
+                    Text(widget.reel.caption),
                   ],
                 ),
               ),
-              Positioned(
-                bottom: 30,
-                right: 10,
-                child: Column(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        post.likedByUser ? Icons.favorite : Icons.favorite_border,
-                        color: post.likedByUser ? Colors.red : Colors.white,
-                        size: 30,
-                      ),
-                      onPressed: () async {
-                        try {
-                          final liked = await ApiService().likePost(post.id);
-                          feed.updatePost(Post(
-                            id: post.id,
-                            caption: post.caption,
-                            mediaUrl: post.mediaUrl,
-                            thumbnailUrl: post.thumbnailUrl,
-                            mediaType: post.mediaType,
-                            createdAt: post.createdAt,
-                            user: post.user,
-                            likesCount: post.likesCount + (liked ? 1 : -1),
-                            commentsCount: post.commentsCount,
-                            savesCount: post.savesCount,
-                            likedByUser: liked,
-                            savedByUser: post.savedByUser,
-                            comments: post.comments,
-                          ));
-                        } catch (e) {}
-                      },
-                    ),
-                    Text('${post.likesCount}', style: TextStyle(color: Colors.white)),
-                    IconButton(
-                      icon: Icon(Icons.comment, color: Colors.white, size: 30),
-                      onPressed: () => _showComments(context, post),
-                    ),
-                    Text('${post.commentsCount}', style: TextStyle(color: Colors.white)),
-                    IconButton(
-                      icon: Icon(
-                        post.savedByUser ? Icons.bookmark : Icons.bookmark_border,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                      onPressed: () async {
-                        try {
-                          final saved = await ApiService().savePost(post.id);
-                          feed.updatePost(Post(
-                            id: post.id,
-                            caption: post.caption,
-                            mediaUrl: post.mediaUrl,
-                            thumbnailUrl: post.thumbnailUrl,
-                            mediaType: post.mediaType,
-                            createdAt: post.createdAt,
-                            user: post.user,
-                            likesCount: post.likesCount,
-                            commentsCount: post.commentsCount,
-                            savesCount: post.savesCount + (saved ? 1 : -1),
-                            likedByUser: post.likedByUser,
-                            savedByUser: saved,
-                            comments: post.comments,
-                          ));
-                        } catch (e) {}
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showComments(BuildContext context, Post post) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.all(8),
-              child: Text('نظرات', style: TextStyle(fontSize: 18)),
-            ),
-            Divider(),
-            Expanded(
-              child: ListView.builder(
-                itemCount: post.comments.length,
-                itemBuilder: (ctx, i) {
-                  final c = post.comments[i];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage: c.user.avatar != null
-                          ? CachedNetworkImageProvider(c.user.avatar!)
-                          : null,
-                      child: c.user.avatar == null ? Icon(Icons.person) : null,
-                    ),
-                    title: Row(
-                      children: [
-                        Text(c.user.fullName),
-                        if (c.user.isVerified) Icon(Icons.verified, color: Colors.blue, size: 16),
-                      ],
-                    ),
-                    subtitle: Text(c.content),
-                    trailing: Text(DateFormat.yMd().add_jm().format(c.createdAt)),
-                  );
-                },
-              ),
-            ),
-            Divider(),
-            Padding(
-              padding: EdgeInsets.all(8),
-              child: Row(
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(hintText: 'نظر خود را بنویسید...'),
-                      onSubmitted: (value) async {
-                        if (value.isNotEmpty) {
-                          try {
-                            final newComment = await ApiService().commentPost(post.id, value);
-                            // بروزرسانی پست - نیاز به بازنشانی داریم اما فعلاً ساده می‌گیریم
-                          } catch (e) {}
-                          Navigator.pop(ctx);
-                        }
-                      },
+                  IconButton(
+                    onPressed: widget.onLike,
+                    icon: Icon(
+                      widget.reel.isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: widget.reel.isLiked ? Colors.red : Colors.white,
+                      size: 30,
                     ),
                   ),
+                  Text('${widget.reel.likesCount}'),
+                  const SizedBox(height: 15),
+                  IconButton(
+                    onPressed: widget.onComment,
+                    icon: const Icon(Icons.comment, color: Colors.white, size: 30),
+                  ),
+                  Text('${widget.reel.commentsCount}'),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-// صفحه پست تکی
-class PostDetailScreen extends StatefulWidget {
-  final Post? post;
-  final int? postId;
-
-  const PostDetailScreen({Key? key, this.post, this.postId}) : super(key: key);
+// -------------------- Comments Page --------------------
+class CommentsPage extends StatefulWidget {
+  final int reelId;
+  const CommentsPage({super.key, required this.reelId});
 
   @override
-  _PostDetailScreenState createState() => _PostDetailScreenState();
+  State<CommentsPage> createState() => _CommentsPageState();
 }
 
-class _PostDetailScreenState extends State<PostDetailScreen> {
-  late Future<Post> _postFuture;
-  final _commentController = TextEditingController();
+class _CommentsPageState extends State<CommentsPage> {
+  final TextEditingController _commentController = TextEditingController();
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.post != null) {
-      _postFuture = Future.value(widget.post);
-    } else {
-      _postFuture = ApiService().getPost(widget.postId!);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('پست')),
-      body: FutureBuilder<Post>(
-        future: _postFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('خطا: ${snapshot.error}'));
-          }
-          final post = snapshot.data!;
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                PostWidget(post: post),
-                Divider(),
-                Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _commentController,
-                          decoration: InputDecoration(hintText: 'نظر خود را بنویسید...'),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.send),
-                        onPressed: () async {
-                          if (_commentController.text.isEmpty) return;
-                          try {
-                            final comment = await ApiService()
-                                .commentPost(post.id, _commentController.text);
-                            setState(() {
-                              post.comments.insert(0, comment);
-                            });
-                            _commentController.clear();
-                          } catch (e) {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(content: Text(e.toString())));
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  itemCount: post.comments.length,
-                  itemBuilder: (ctx, i) {
-                    final c = post.comments[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: c.user.avatar != null
-                            ? CachedNetworkImageProvider(c.user.avatar!)
-                            : null,
-                        child: c.user.avatar == null ? Icon(Icons.person) : null,
-                      ),
-                      title: Row(
-                        children: [
-                          Text(c.user.fullName),
-                          if (c.user.isVerified)
-                            Icon(Icons.verified, color: Colors.blue, size: 16),
-                        ],
-                      ),
-                      subtitle: Text(c.content),
-                      trailing: Text(DateFormat.yMd().add_jm().format(c.createdAt)),
-                    );
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// صفحه ایجاد پست
-class CreatePostScreen extends StatefulWidget {
-  @override
-  _CreatePostScreenState createState() => _CreatePostScreenState();
-}
-
-class _CreatePostScreenState extends State<CreatePostScreen> {
-  final _captionController = TextEditingController();
-  File? _mediaFile;
-  String? _mediaType;
-  bool _isLoading = false;
-
-  Future<void> _pickMedia() async {
-    final picker = ImagePicker();
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: Icon(Icons.photo),
-              title: Text('گرفتن عکس'),
-              onTap: () async {
-                Navigator.pop(context);
-                final picked = await picker.pickImage(source: ImageSource.camera);
-                if (picked != null) {
-                  setState(() {
-                    _mediaFile = File(picked.path);
-                    _mediaType = 'image';
-                  });
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.video_camera_back),
-              title: Text('گرفتن ویدیو'),
-              onTap: () async {
-                Navigator.pop(context);
-                final picked = await picker.pickVideo(source: ImageSource.camera);
-                if (picked != null) {
-                  setState(() {
-                    _mediaFile = File(picked.path);
-                    _mediaType = 'video';
-                  });
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.photo_library),
-              title: Text('انتخاب از گالری'),
-              onTap: () async {
-                Navigator.pop(context);
-                final picked = await picker.pickImage(source: ImageSource.gallery);
-                if (picked != null) {
-                  setState(() {
-                    _mediaFile = File(picked.path);
-                    _mediaType = 'image';
-                  });
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.video_library),
-              title: Text('انتخاب ویدیو از گالری'),
-              onTap: () async {
-                Navigator.pop(context);
-                final picked = await picker.pickVideo(source: ImageSource.gallery);
-                if (picked != null) {
-                  setState(() {
-                    _mediaFile = File(picked.path);
-                    _mediaType = 'video';
-                  });
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submit() async {
-    if (_mediaFile == null || _mediaType == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('لطفاً یک رسانه انتخاب کنید')));
-      return;
-    }
-    setState(() => _isLoading = true);
-    try {
-      final post = await ApiService()
-          .createPost(_captionController.text, _mediaFile!, _mediaType!);
-      Provider.of<FeedProvider>(context, listen: false).loadFeed();
-      Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('پست جدید')),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            if (_mediaFile != null)
-              _mediaType == 'image'
-                  ? Image.file(_mediaFile!, height: 200)
-                  : Container(
-                      height: 200,
-                      color: Colors.black,
-                      child: Center(child: Text('ویدیو انتخاب شد')),
-                    ),
-            ElevatedButton(
-              onPressed: _pickMedia,
-              child: Text('انتخاب رسانه'),
-            ),
-            TextField(
-              controller: _captionController,
-              decoration: InputDecoration(labelText: 'کپشن'),
-              maxLines: 3,
-            ),
-            SizedBox(height: 20),
-            _isLoading
-                ? CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _submit,
-                    child: Text('اشتراک‌گذاری'),
-                  ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// صفحه پروفایل
-class ProfileScreen extends StatefulWidget {
-  final String username;
-  const ProfileScreen({Key? key, required this.username}) : super(key: key);
-
-  @override
-  _ProfileScreenState createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ProfileProvider>(context, listen: false).loadProfile(widget.username);
+      context.read<CommentsProvider>().fetchComments(widget.reelId);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final profile = Provider.of<ProfileProvider>(context);
-    final auth = Provider.of<AuthProvider>(context);
-    final isOwnProfile = auth.user?.username == widget.username;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text('پروفایل'),
-        actions: [
-          if (isOwnProfile)
-            IconButton(
-              icon: Icon(Icons.edit),
-              onPressed: () => Navigator.pushNamed(context, '/edit_profile'),
-            ),
-        ],
-      ),
-      body: profile.isLoading
-          ? Center(child: CircularProgressIndicator())
-          : profile.profileUser == null
-              ? Center(child: Text('کاربر یافت نشد'))
-              : ListView(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
+      appBar: AppBar(title: const Text('Comments')),
+      body: Column(
+        children: [
+          Expanded(
+            child: Consumer<CommentsProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading && provider.comments.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (provider.error != null) {
+                  return Center(child: Text('Error: ${provider.error}'));
+                }
+                return ListView.builder(
+                  reverse: true,
+                  itemCount: provider.comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = provider.comments[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: comment.user.avatar != null
+                            ? CachedNetworkImageProvider(comment.user.avatar!)
+                            : null,
+                        child: comment.user.avatar == null ? const Icon(Icons.person) : null,
+                      ),
+                      title: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundImage: profile.profileUser!.avatar != null
-                                ? CachedNetworkImageProvider(profile.profileUser!.avatar!)
-                                : null,
-                            child: profile.profileUser!.avatar == null
-                                ? Icon(Icons.person, size: 50)
-                                : null,
-                          ),
-                          SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                profile.profileUser!.fullName,
-                                style: TextStyle(fontSize: 20),
-                              ),
-                              if (profile.profileUser!.isVerified)
-                                Icon(Icons.verified, color: Colors.blue),
-                            ],
-                          ),
-                          Text('@${profile.profileUser!.username}'),
-                          if (profile.profileUser!.bio != null)
-                            Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Text(profile.profileUser!.bio!),
-                            ),
-                          Text('${profile.profileUser!.postsCount} پست'),
-                          if (auth.user?.isAdmin == true && !isOwnProfile)
-                            SwitchListTile(
-                              title: Text('تیک آبی'),
-                              value: profile.profileUser!.isVerified,
-                              onChanged: (value) async {
-                                try {
-                                  await ApiService()
-                                      .adminVerify(profile.profileUser!.username, value);
-                                  profile.loadProfile(widget.username);
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context)
-                                      .showSnackBar(SnackBar(content: Text(e.toString())));
-                                }
-                              },
-                            ),
+                          Text(comment.user.username, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          if (comment.user.isBlue)
+                            const Icon(Icons.verified, color: Colors.blue, size: 14),
                         ],
                       ),
-                    ),
-                    Divider(),
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 2,
-                        mainAxisSpacing: 2,
+                      subtitle: Text(comment.text),
+                      trailing: Text(
+                        _timeAgo(comment.createdAt),
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
-                      itemCount: profile.posts.length,
-                      itemBuilder: (ctx, i) {
-                        final p = profile.posts[i];
-                        return GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/post/${p.id}', arguments: p),
-                          child: CachedNetworkImage(
-                            imageUrl: p.thumbnailUrl ?? p.mediaUrl,
-                            fit: BoxFit.cover,
-                          ),
-                        );
-                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _commentController,
+                    decoration: const InputDecoration(
+                      hintText: 'Add a comment...',
+                      border: OutlineInputBorder(),
                     ),
-                  ],
+                  ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: () async {
+                    if (_commentController.text.isNotEmpty) {
+                      final provider = context.read<CommentsProvider>();
+                      await provider.addComment(widget.reelId, _commentController.text);
+                      _commentController.clear();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inDays > 0) return '${diff.inDays}d';
+    if (diff.inHours > 0) return '${diff.inHours}h';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
+    return 'now';
+  }
+}
+
+// -------------------- Profile Page --------------------
+class ProfilePage extends StatelessWidget {
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context);
+    final user = auth.user;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: user == null
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(source: ImageSource.gallery);
+                      if (picked != null) {
+                        await auth.uploadAvatar(File(picked.path));
+                      }
+                    },
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundImage: user.avatar != null
+                          ? CachedNetworkImageProvider(user.avatar!)
+                          : null,
+                      child: user.avatar == null
+                          ? const Icon(Icons.camera_alt, size: 50, color: Colors.grey)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text('@${user.username}', style: const TextStyle(fontSize: 20)),
+                  if (user.isBlue) const Icon(Icons.verified, color: Colors.blue),
+                  const SizedBox(height: 20),
+                  Text(user.bio.isEmpty ? 'No bio yet' : user.bio),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () => _editBio(context, user.bio),
+                    child: const Text('Edit Bio'),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await auth.logout();
+                      // navigates to login automatically via MyApp
+                    },
+                    child: const Text('Logout'),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  void _editBio(BuildContext context, String currentBio) {
+    final controller = TextEditingController(text: currentBio);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Edit Bio'),
+        content: TextField(controller: controller, maxLines: 3),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await context.read<AuthProvider>().updateBio(controller.text);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// صفحه ویرایش پروفایل (آواتار)
-class EditProfileScreen extends StatefulWidget {
+// -------------------- Create Reel Page --------------------
+class CreateReelPage extends StatefulWidget {
+  const CreateReelPage({super.key});
+
   @override
-  _EditProfileScreenState createState() => _EditProfileScreenState();
+  State<CreateReelPage> createState() => _CreateReelPageState();
 }
 
-class _EditProfileScreenState extends State<EditProfileScreen> {
-  File? _avatarFile;
+class _CreateReelPageState extends State<CreateReelPage> {
+  File? _selectedFile;
+  final TextEditingController _captionController = TextEditingController();
   bool _isUploading = false;
 
-  Future<void> _pickAvatar() async {
+  Future<void> _pickFile() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      setState(() {
-        _avatarFile = File(picked.path);
-      });
-    }
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Gallery'),
+              onTap: () async {
+                Navigator.pop(context);
+                final picked = await picker.pickImage(source: ImageSource.gallery);
+                if (picked != null) setState(() => _selectedFile = File(picked.path));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library),
+              title: const Text('Video Gallery'),
+              onTap: () async {
+                Navigator.pop(context);
+                final picked = await picker.pickVideo(source: ImageSource.gallery);
+                if (picked != null) setState(() => _selectedFile = File(picked.path));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera),
+              title: const Text('Camera'),
+              onTap: () async {
+                Navigator.pop(context);
+                final picked = await picker.pickImage(source: ImageSource.camera);
+                if (picked != null) setState(() => _selectedFile = File(picked.path));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  ImageProvider? get _avatarImage {
-    if (_avatarFile != null) return FileImage(_avatarFile!);
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    if (auth.user?.avatar != null) {
-      return CachedNetworkImageProvider(auth.user!.avatar!);
-    }
-    return null;
-  }
-
-  Future<void> _uploadAvatar() async {
-    if (_avatarFile == null) return;
+  Future<void> _upload() async {
+    if (_selectedFile == null) return;
     setState(() => _isUploading = true);
     try {
-      final avatarUrl = await ApiService().uploadAvatar(_avatarFile!);
-      await Provider.of<AuthProvider>(context, listen: false).updateAvatar(avatarUrl);
-      Navigator.pop(context);
+      final provider = context.read<ReelsProvider>();
+      await provider.createReel(_selectedFile!, _captionController.text);
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     } finally {
       setState(() => _isUploading = false);
     }
@@ -1585,87 +1116,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: Text('ویرایش پروفایل')),
+      appBar: AppBar(title: const Text('Create Reel')),
       body: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            CircleAvatar(
-              radius: 60,
-              backgroundImage: _avatarImage,
-              child: _avatarFile == null && auth.user?.avatar == null
-                  ? Icon(Icons.person, size: 60)
-                  : null,
+            if (_selectedFile != null)
+              Container(
+                height: 200,
+                color: Colors.grey[900],
+                child: _selectedFile!.path.toLowerCase().endsWith('.mp4') ||
+                        _selectedFile!.path.toLowerCase().endsWith('.mov')
+                    ? const Center(child: Text('Video selected'))
+                    : Image.file(_selectedFile!),
+              )
+            else
+              GestureDetector(
+                onTap: _pickFile,
+                child: Container(
+                  height: 200,
+                  color: Colors.grey[900],
+                  child: const Center(child: Icon(Icons.add, size: 50)),
+                ),
+              ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _captionController,
+              decoration: const InputDecoration(labelText: 'Caption'),
+              maxLines: 3,
             ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _pickAvatar,
-              child: Text('انتخاب آواتار'),
-            ),
-            SizedBox(height: 20),
-            if (_isUploading)
-              CircularProgressIndicator()
-            else if (_avatarFile != null)
+            const SizedBox(height: 20),
+            if (_isUploading) const CircularProgressIndicator(),
+            if (!_isUploading)
               ElevatedButton(
-                onPressed: _uploadAvatar,
-                child: Text('آپلود'),
+                onPressed: _selectedFile == null ? null : _upload,
+                child: const Text('Post'),
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ------------------- Main App -------------------
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  final auth = AuthProvider();
-  await auth._loadStoredData();
-  runApp(MyApp(auth: auth));
-}
-
-class MyApp extends StatelessWidget {
-  final AuthProvider auth;
-  const MyApp({Key? key, required this.auth}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: auth),
-        ChangeNotifierProvider(create: (_) => FeedProvider()),
-        ChangeNotifierProvider(create: (_) => ProfileProvider()),
-      ],
-      child: MaterialApp(
-        title: 'اینستاگرام کلون',
-        theme: ThemeData(primarySwatch: Colors.blue),
-        initialRoute: auth.isLoggedIn ? '/home' : '/login',
-        routes: {
-          '/login': (ctx) => LoginScreen(),
-          '/register': (ctx) => RegisterScreen(),
-          '/home': (ctx) => HomeScreen(),
-          '/create_post': (ctx) => CreatePostScreen(),
-          '/edit_profile': (ctx) => EditProfileScreen(),
-        },
-        onGenerateRoute: (settings) {
-          if (settings.name == '/profile') {
-            final username = settings.arguments as String;
-            return MaterialPageRoute(
-              builder: (ctx) => ProfileScreen(username: username),
-            );
-          }
-          if (settings.name!.startsWith('/post/')) {
-            final postId = int.tryParse(settings.name!.split('/').last);
-            final post = settings.arguments as Post?;
-            return MaterialPageRoute(
-              builder: (ctx) => PostDetailScreen(post: post, postId: postId),
-            );
-          }
-          return null;
-        },
       ),
     );
   }
