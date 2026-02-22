@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_video_player/cached_video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:path_provider/path_provider.dart';
 
 // ==================== Models ====================
 
@@ -116,6 +118,26 @@ class Reel {
       isLiked: json['isLiked'] ?? false,
     );
   }
+
+  Reel copyWith({
+    int? likesCount,
+    bool? isLiked,
+    List<Comment>? comments,
+    int? commentsCount,
+  }) {
+    return Reel(
+      id: id,
+      type: type,
+      fileUrl: fileUrl,
+      caption: caption,
+      createdAt: createdAt,
+      likesCount: likesCount ?? this.likesCount,
+      commentsCount: commentsCount ?? this.commentsCount,
+      comments: comments ?? this.comments,
+      user: user,
+      isLiked: isLiked ?? this.isLiked,
+    );
+  }
 }
 
 // ==================== API Service ====================
@@ -156,7 +178,6 @@ class ApiService {
     return headers;
   }
 
-  // Helper to update cookie from response
   void _updateCookie(http.Response response) {
     final rawCookie = response.headers['set-cookie'];
     if (rawCookie != null) {
@@ -164,9 +185,7 @@ class ApiService {
     }
   }
 
-  // Register
-  Future<User> register(
-      String username, String password, String name, String bio) async {
+  Future<User> register(String username, String password, String name, String bio) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/register'),
       headers: {'Content-Type': 'application/json'},
@@ -181,11 +200,10 @@ class ApiService {
     if (response.statusCode == 201) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Registration failed');
+      throw Exception(_parseError(response));
     }
   }
 
-  // Login
   Future<User> login(String username, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -196,11 +214,10 @@ class ApiService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Login failed');
+      throw Exception(_parseError(response));
     }
   }
 
-  // Logout
   Future<void> logout() async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/logout'),
@@ -213,7 +230,6 @@ class ApiService {
     }
   }
 
-  // Get current user
   Future<User> getCurrentUser() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/me'),
@@ -226,11 +242,8 @@ class ApiService {
     }
   }
 
-  // Update profile (with avatar)
-  Future<User> updateProfile(
-      {String? name, String? bio, XFile? avatarFile}) async {
-    var request = http.MultipartRequest(
-        'PUT', Uri.parse('$baseUrl/api/profile'));
+  Future<User> updateProfile({String? name, String? bio, XFile? avatarFile}) async {
+    var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/api/profile'));
     request.headers.addAll(await _multipartHeaders());
     if (name != null) request.fields['name'] = name;
     if (bio != null) request.fields['bio'] = bio;
@@ -248,15 +261,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Update failed');
+      throw Exception(_parseError(response));
     }
   }
 
-  // Create reel
-  Future<Reel> createReel(
-      XFile file, String type, String caption) async {
-    var request = http.MultipartRequest(
-        'POST', Uri.parse('$baseUrl/api/reels'));
+  Future<Reel> createReel(XFile file, String type, String caption) async {
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/reels'));
     request.headers.addAll(await _multipartHeaders());
     request.fields['type'] = type;
     if (caption.isNotEmpty) request.fields['caption'] = caption;
@@ -270,13 +280,16 @@ class ApiService {
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 201) {
-      return Reel.fromJson(jsonDecode(response.body));
+      try {
+        return Reel.fromJson(jsonDecode(response.body));
+      } catch (e) {
+        throw Exception('Invalid response from server');
+      }
     } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Create reel failed');
+      throw Exception(_parseError(response));
     }
   }
 
-  // Get feed
   Future<List<Reel>> getFeed({int page = 1, int perPage = 10}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/reels?page=$page&per_page=$perPage'),
@@ -290,7 +303,6 @@ class ApiService {
     }
   }
 
-  // Get single reel
   Future<Reel> getReel(int reelId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/reels/$reelId'),
@@ -303,7 +315,6 @@ class ApiService {
     }
   }
 
-  // Like/unlike reel
   Future<Reel> toggleLike(int reelId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/reels/$reelId/like'),
@@ -316,7 +327,6 @@ class ApiService {
     }
   }
 
-  // Add comment
   Future<Reel> addComment(int reelId, String text) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/reels/$reelId/comment'),
@@ -326,15 +336,53 @@ class ApiService {
     if (response.statusCode == 201) {
       return Reel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to add comment');
+      throw Exception(_parseError(response));
     }
   }
+
+  String _parseError(http.Response response) {
+    try {
+      final body = jsonDecode(response.body);
+      return body['error'] ?? 'Unknown error';
+    } catch (_) {
+      return 'Server error (${response.statusCode})';
+    }
+  }
+}
+
+// ==================== Saved Posts Service ====================
+
+class SavedPostsService {
+  static const String savedKey = 'saved_posts';
+  final SharedPreferences prefs;
+
+  SavedPostsService(this.prefs);
+
+  Set<int> getSavedIds() {
+    final list = prefs.getStringList(savedKey) ?? [];
+    return list.map((e) => int.parse(e)).toSet();
+  }
+
+  Future<void> savePost(int id) async {
+    final set = getSavedIds();
+    set.add(id);
+    await prefs.setStringList(savedKey, set.map((e) => e.toString()).toList());
+  }
+
+  Future<void> unsavePost(int id) async {
+    final set = getSavedIds();
+    set.remove(id);
+    await prefs.setStringList(savedKey, set.map((e) => e.toString()).toList());
+  }
+
+  bool isSaved(int id) => getSavedIds().contains(id);
 }
 
 // ==================== App State ====================
 
 class AppState extends ChangeNotifier {
   ApiService? _api;
+  SavedPostsService? _savedService;
   User? _currentUser;
   List<Reel> _feed = [];
   int _currentPage = 1;
@@ -347,8 +395,9 @@ class AppState extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
 
-  void init(ApiService api) {
+  void init(ApiService api, SavedPostsService savedService) {
     _api = api;
+    _savedService = savedService;
   }
 
   Future<void> loadCurrentUser() async {
@@ -435,24 +484,69 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Optimistic like
   Future<void> toggleLike(int reelId) async {
     final index = _feed.indexWhere((r) => r.id == reelId);
     if (index == -1) return;
+
+    final oldReel = _feed[index];
+    final newLiked = !oldReel.isLiked;
+    final delta = newLiked ? 1 : -1;
+    final updatedReel = oldReel.copyWith(
+      isLiked: newLiked,
+      likesCount: oldReel.likesCount + delta,
+    );
+    _feed[index] = updatedReel;
+    notifyListeners();
+
     try {
-      final updated = await _api!.toggleLike(reelId);
-      _feed[index] = updated;
+      await _api!.toggleLike(reelId);
+    } catch (e) {
+      // Revert on error
+      _feed[index] = oldReel;
       notifyListeners();
-    } catch (e) {}
+    }
   }
 
+  // Optimistic comment
   Future<void> addComment(int reelId, String text) async {
     final index = _feed.indexWhere((r) => r.id == reelId);
     if (index == -1) return;
+
+    // We don't have the new comment data yet, so we just increment count optimistically
+    final oldReel = _feed[index];
+    final updatedReel = oldReel.copyWith(
+      commentsCount: oldReel.commentsCount + 1,
+    );
+    _feed[index] = updatedReel;
+    notifyListeners();
+
     try {
-      final updated = await _api!.addComment(reelId, text);
-      _feed[index] = updated;
+      final newReel = await _api!.addComment(reelId, text);
+      _feed[index] = newReel; // replace with actual data
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      // Revert on error
+      _feed[index] = oldReel;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  bool isSaved(int reelId) => _savedService!.isSaved(reelId);
+
+  Future<void> toggleSave(int reelId) async {
+    if (_savedService!.isSaved(reelId)) {
+      await _savedService!.unsavePost(reelId);
+    } else {
+      await _savedService!.savePost(reelId);
+    }
+    notifyListeners(); // Notify listeners to update UI
+  }
+
+  List<Reel> getSavedReels() {
+    final savedIds = _savedService!.getSavedIds();
+    return _feed.where((reel) => savedIds.contains(reel.id)).toList();
   }
 }
 
@@ -464,19 +558,21 @@ void main() async {
   await Permission.camera.request();
   final prefs = await SharedPreferences.getInstance();
   final api = ApiService(prefs);
-  runApp(MyApp(api: api));
+  final savedService = SavedPostsService(prefs);
+  runApp(MyApp(api: api, savedService: savedService));
 }
 
 class MyApp extends StatelessWidget {
   final ApiService api;
-  const MyApp({super.key, required this.api});
+  final SavedPostsService savedService;
+  const MyApp({super.key, required this.api, required this.savedService});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) {
         final state = AppState();
-        state.init(api);
+        state.init(api, savedService);
         state.loadCurrentUser();
         return state;
       },
@@ -634,6 +730,7 @@ class _MainScreenState extends State<MainScreen> {
   final screens = [
     const FeedScreen(),
     const UploadReelScreen(),
+    const SavedScreen(),
     const ProfileScreen(),
   ];
 
@@ -647,6 +744,7 @@ class _MainScreenState extends State<MainScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.add), label: 'Upload'),
+          BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Saved'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
@@ -665,6 +763,14 @@ class FeedScreen extends StatefulWidget {
 
 class _FeedScreenState extends State<FeedScreen> {
   final PageController _pageController = PageController();
+  final RefreshIndicator _refreshIndicator = const RefreshIndicator(
+    onRefresh: _onRefresh,
+    child: SizedBox.shrink(),
+  );
+
+  static Future<void> _onRefresh() async {
+    // Implemented in build
+  }
 
   @override
   void initState() {
@@ -677,27 +783,34 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    return PageView.builder(
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: state.feed.length + (state.hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == state.feed.length) {
-          if (state.hasMore && !state.isLoading) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              state.loadFeed();
-            });
-            return const Center(child: CircularProgressIndicator());
-          }
-          return const SizedBox.shrink();
-        }
-        final reel = state.feed[index];
-        return ReelWidget(
-          reel: reel,
-          onLike: () => state.toggleLike(reel.id),
-          onComment: () => _showComments(context, reel),
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        await state.loadFeed(reset: true);
       },
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        itemCount: state.feed.length + (state.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == state.feed.length) {
+            if (state.hasMore && !state.isLoading) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                state.loadFeed();
+              });
+              return const Center(child: CircularProgressIndicator());
+            }
+            return const SizedBox.shrink();
+          }
+          final reel = state.feed[index];
+          return ReelWidget(
+            reel: reel,
+            onLike: () => state.toggleLike(reel.id),
+            onComment: () => _showComments(context, reel),
+            onSave: () => state.toggleSave(reel.id),
+            isSaved: state.isSaved(reel.id),
+          );
+        },
+      ),
     );
   }
 
@@ -720,12 +833,16 @@ class ReelWidget extends StatefulWidget {
   final Reel reel;
   final VoidCallback onLike;
   final VoidCallback onComment;
+  final VoidCallback onSave;
+  final bool isSaved;
 
   const ReelWidget({
     super.key,
     required this.reel,
     required this.onLike,
     required this.onComment,
+    required this.onSave,
+    required this.isSaved,
   });
 
   @override
@@ -733,15 +850,14 @@ class ReelWidget extends StatefulWidget {
 }
 
 class _ReelWidgetState extends State<ReelWidget> {
-  VideoPlayerController? _videoController;
+  CachedVideoPlayerController? _videoController;
 
   @override
   void initState() {
     super.initState();
     if (widget.reel.type == 'video') {
-      _videoController = VideoPlayerController.networkUrl(
-        Uri.parse(widget.reel.fileUrl),
-      )..initialize().then((_) {
+      _videoController = CachedVideoPlayerController.network(widget.reel.fileUrl)
+        ..initialize().then((_) {
           setState(() {});
           _videoController?.play();
           _videoController?.setLooping(true);
@@ -769,7 +885,7 @@ class _ReelWidgetState extends State<ReelWidget> {
                   errorWidget: (ctx, url, err) => const Center(child: Icon(Icons.error)),
                 )
               : _videoController != null && _videoController!.value.isInitialized
-                  ? VideoPlayer(_videoController!)
+                  ? CachedVideoPlayer(_videoController!)
                   : Container(color: Colors.black),
         ),
         // Gradient overlay
@@ -852,6 +968,12 @@ class _ReelWidgetState extends State<ReelWidget> {
                 label: widget.reel.commentsCount.toString(),
                 onTap: widget.onComment,
               ),
+              const SizedBox(height: 20),
+              _buildActionButton(
+                icon: widget.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                label: '',
+                onTap: widget.onSave,
+              ),
             ],
           ),
         ),
@@ -870,8 +992,8 @@ class _ReelWidgetState extends State<ReelWidget> {
       child: Column(
         children: [
           Icon(icon, color: color, size: 30),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          if (label.isNotEmpty) const SizedBox(height: 4),
+          if (label.isNotEmpty) Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
@@ -890,24 +1012,60 @@ class CommentSheet extends StatefulWidget {
 
 class _CommentSheetState extends State<CommentSheet> {
   final TextEditingController _commentController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendComment() async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _isSending = true);
+    try {
+      await context.read<AppState>().addComment(widget.reel.id, text);
+      _commentController.clear();
+      _focusNode.unfocus();
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send comment: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isSending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Center(
-            child: Text(
-              'Comments',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text(
+                'Comments',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
           const Divider(),
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: widget.reel.comments.length,
               itemBuilder: (ctx, i) {
                 final comment = widget.reel.comments[i];
@@ -940,29 +1098,34 @@ class _CommentSheetState extends State<CommentSheet> {
             ),
           ),
           const Divider(),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a comment...',
-                    border: InputBorder.none,
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _commentController,
+                    focusNode: _focusNode,
+                    decoration: const InputDecoration(
+                      hintText: 'Add a comment...',
+                      border: InputBorder.none,
+                    ),
+                    onSubmitted: (_) => _sendComment(),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: () async {
-                  final text = _commentController.text.trim();
-                  if (text.isEmpty) return;
-                  final state = context.read<AppState>();
-                  await state.addComment(widget.reel.id, text);
-                  _commentController.clear();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
+                if (_isSending)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: _sendComment,
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1036,12 +1199,17 @@ class _UploadReelScreenState extends State<UploadReelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reel uploaded!')),
         );
-        Navigator.pop(context); // back to feed
+        // Clear form
+        setState(() {
+          _selectedFile = null;
+          _mediaType = null;
+          _captionController.clear();
+        });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text('Upload failed: $e')),
         );
       }
     } finally {
@@ -1095,6 +1263,57 @@ class _UploadReelScreenState extends State<UploadReelScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ==================== Saved Screen ====================
+
+class SavedScreen extends StatelessWidget {
+  const SavedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final savedReels = state.getSavedReels();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Saved Reels')),
+      body: savedReels.isEmpty
+          ? const Center(child: Text('No saved reels yet'))
+          : ListView.builder(
+              itemCount: savedReels.length,
+              itemBuilder: (ctx, i) {
+                final reel = savedReels[i];
+                return ListTile(
+                  leading: reel.type == 'image'
+                      ? CachedNetworkImage(
+                          imageUrl: reel.fileUrl,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          width: 50,
+                          height: 50,
+                          color: Colors.grey,
+                          child: const Icon(Icons.video_library, size: 30),
+                        ),
+                  title: Text(reel.user.username),
+                  subtitle: Text(reel.caption),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.bookmark, color: Colors.blue),
+                    onPressed: () => state.toggleSave(reel.id),
+                  ),
+                  onTap: () {
+                    // Navigate to a detail view? Or just show in feed? For simplicity, we'll just show a snackbar.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Reel by ${reel.user.username}')),
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 }
@@ -1174,7 +1393,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    // Fix: Use a separate variable to avoid ternary type issues
                     backgroundImage: _getAvatarProvider(user),
                     child: user.avatar == null && _newAvatar == null
                         ? const Icon(Icons.person, size: 50)
@@ -1217,7 +1435,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Helper method to provide the correct ImageProvider
   ImageProvider? _getAvatarProvider(User user) {
     if (_newAvatar != null) {
       return FileImage(File(_newAvatar!.path));
