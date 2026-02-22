@@ -1,4 +1,3 @@
-// main.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -249,7 +248,7 @@ class ApiService {
     try {
       String fileName = file.path.split('/').last;
       String ext = fileName.split('.').last.toLowerCase();
-      String type = (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif') ? 'image' : 'video';
+      // نوع فایل توسط سرور تشخیص داده می‌شود، اما برای اطمینان می‌فرستیم
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(file.path, filename: fileName),
         'caption': caption,
@@ -432,6 +431,15 @@ class ReelsProvider extends ChangeNotifier {
       }
     } catch (e) {
       // ignore error for now
+    }
+  }
+
+  // --- متد جدید برای ایجاد ریل ---
+  Future<Reel> createReel(File file, String caption) async {
+    try {
+      return await _api.createReel(file, caption);
+    } catch (e) {
+      throw e; // propagate to UI
     }
   }
 }
