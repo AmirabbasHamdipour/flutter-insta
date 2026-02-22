@@ -141,7 +141,7 @@ class ApiService {
   }
 
   Map<String, String> get _headers {
-    final headers = {'Content-Type': 'application/json'};
+    final headers = <String, String>{'Content-Type': 'application/json'};
     if (_cookie != null) {
       headers['Cookie'] = _cookie!;
     }
@@ -149,7 +149,7 @@ class ApiService {
   }
 
   Future<Map<String, String>> _multipartHeaders() async {
-    final headers = {};
+    final headers = <String, String>{};
     if (_cookie != null) {
       headers['Cookie'] = _cookie!;
     }
@@ -1174,11 +1174,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    backgroundImage: _newAvatar != null
-                        ? FileImage(File(_newAvatar!.path))
-                        : (user.avatar != null
-                            ? CachedNetworkImageProvider(user.avatar!)
-                            : null),
+                    // Fix: Use a separate variable to avoid ternary type issues
+                    backgroundImage: _getAvatarProvider(user),
                     child: user.avatar == null && _newAvatar == null
                         ? const Icon(Icons.person, size: 50)
                         : null,
@@ -1218,5 +1215,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  // Helper method to provide the correct ImageProvider
+  ImageProvider? _getAvatarProvider(User user) {
+    if (_newAvatar != null) {
+      return FileImage(File(_newAvatar!.path));
+    } else if (user.avatar != null) {
+      return CachedNetworkImageProvider(user.avatar!);
+    }
+    return null;
   }
 }
