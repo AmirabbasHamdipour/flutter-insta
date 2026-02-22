@@ -1,5 +1,5 @@
-name: instagram_clone
-description: A new Flutter project.
+name: instagram_reels_clone
+description: A Flutter client for Instagram Reels API
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,18 +9,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: 
-  provider: 
-  shared_preferences: 
+  dio: 
+  dio_cookie_manager: 
+  cookie_jar: 
   image_picker: 
   video_player: 
-  intl: 
   cached_network_image: 
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: 
+  provider: 
+  path_provider: 
 
 flutter:
   uses-material-design: true
