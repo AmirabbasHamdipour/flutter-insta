@@ -1,22 +1,19 @@
 name: instagram_reels_clone
 description: A Flutter client for Instagram Reels API
 publish_to: 'none'
-version: 1.0.0+1
-
 environment:
-  sdk: ">=2.19.0 <4.0.0"
-
+  sdk: ">=3.0.0 <4.0.0"
 dependencies:
   flutter:
     sdk: flutter
-  dio: 
-  dio_cookie_manager: 
-  cookie_jar: 
+  http: 
   image_picker: 
   video_player: 
-  cached_network_image: 
   provider: 
-  path_provider: 
-
+  shared_preferences: 
+  flutter_staggered_grid_view: 
+  cached_network_image: 
+  intl: 
+  permission_handler: 
 flutter:
   uses-material-design: true
