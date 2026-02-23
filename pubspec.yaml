@@ -9,11 +9,13 @@ dependencies:
   http: 
   image_picker: 
   video_player: 
+  cached_video_player: 
   provider: 
   shared_preferences: 
   flutter_staggered_grid_view: 
   cached_network_image: 
   intl: 
   permission_handler: 
+  path_provider: 
 flutter:
   uses-material-design: true
