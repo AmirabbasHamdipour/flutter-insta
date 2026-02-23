@@ -1,11 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
-import 'package:cached_video_player/cached_video_player.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
@@ -484,7 +483,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Optimistic like
   Future<void> toggleLike(int reelId) async {
     final index = _feed.indexWhere((r) => r.id == reelId);
     if (index == -1) return;
@@ -502,18 +500,15 @@ class AppState extends ChangeNotifier {
     try {
       await _api!.toggleLike(reelId);
     } catch (e) {
-      // Revert on error
       _feed[index] = oldReel;
       notifyListeners();
     }
   }
 
-  // Optimistic comment
   Future<void> addComment(int reelId, String text) async {
     final index = _feed.indexWhere((r) => r.id == reelId);
     if (index == -1) return;
 
-    // We don't have the new comment data yet, so we just increment count optimistically
     final oldReel = _feed[index];
     final updatedReel = oldReel.copyWith(
       commentsCount: oldReel.commentsCount + 1,
@@ -523,10 +518,9 @@ class AppState extends ChangeNotifier {
 
     try {
       final newReel = await _api!.addComment(reelId, text);
-      _feed[index] = newReel; // replace with actual data
+      _feed[index] = newReel;
       notifyListeners();
     } catch (e) {
-      // Revert on error
       _feed[index] = oldReel;
       notifyListeners();
       rethrow;
@@ -541,7 +535,7 @@ class AppState extends ChangeNotifier {
     } else {
       await _savedService!.savePost(reelId);
     }
-    notifyListeners(); // Notify listeners to update UI
+    notifyListeners();
   }
 
   List<Reel> getSavedReels() {
@@ -763,14 +757,6 @@ class FeedScreen extends StatefulWidget {
 
 class _FeedScreenState extends State<FeedScreen> {
   final PageController _pageController = PageController();
-  final RefreshIndicator _refreshIndicator = const RefreshIndicator(
-    onRefresh: _onRefresh,
-    child: SizedBox.shrink(),
-  );
-
-  static Future<void> _onRefresh() async {
-    // Implemented in build
-  }
 
   @override
   void initState() {
@@ -827,7 +813,7 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 }
 
-// ==================== Reel Widget ====================
+// ==================== Reel Widget (با کش ویدیو) ====================
 
 class ReelWidget extends StatefulWidget {
   final Reel reel;
@@ -850,17 +836,43 @@ class ReelWidget extends StatefulWidget {
 }
 
 class _ReelWidgetState extends State<ReelWidget> {
-  CachedVideoPlayerController? _videoController;
+  VideoPlayerController? _videoController;
+  bool _isVideoInitialized = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.reel.type == 'video') {
-      _videoController = CachedVideoPlayerController.network(widget.reel.fileUrl)
+      _initializeVideo();
+    }
+  }
+
+  Future<void> _initializeVideo() async {
+    try {
+      // دریافت فایل کش شده از CacheManager
+      final file = await DefaultCacheManager().getSingleFile(widget.reel.fileUrl);
+      _videoController = VideoPlayerController.file(file)
         ..initialize().then((_) {
-          setState(() {});
-          _videoController?.play();
-          _videoController?.setLooping(true);
+          if (mounted) {
+            setState(() => _isVideoInitialized = true);
+            _videoController?.play();
+            _videoController?.setLooping(true);
+          }
+        }).catchError((e) {
+          debugPrint('Video init error: $e');
+        });
+    } catch (e) {
+      debugPrint('Cache error: $e');
+      // اگر کش مشکل داشت، مستقیم از شبکه پخش کن (بدون کش)
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.reel.fileUrl))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() => _isVideoInitialized = true);
+            _videoController?.play();
+            _videoController?.setLooping(true);
+          }
+        }).catchError((e) {
+          debugPrint('Network video error: $e');
         });
     }
   }
@@ -884,8 +896,8 @@ class _ReelWidgetState extends State<ReelWidget> {
                   placeholder: (ctx, url) => Container(color: Colors.black),
                   errorWidget: (ctx, url, err) => const Center(child: Icon(Icons.error)),
                 )
-              : _videoController != null && _videoController!.value.isInitialized
-                  ? CachedVideoPlayer(_videoController!)
+              : _isVideoInitialized && _videoController != null
+                  ? VideoPlayer(_videoController!)
                   : Container(color: Colors.black),
         ),
         // Gradient overlay
@@ -1199,7 +1211,6 @@ class _UploadReelScreenState extends State<UploadReelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reel uploaded!')),
         );
-        // Clear form
         setState(() {
           _selectedFile = null;
           _mediaType = null;
@@ -1306,7 +1317,6 @@ class SavedScreen extends StatelessWidget {
                     onPressed: () => state.toggleSave(reel.id),
                   ),
                   onTap: () {
-                    // Navigate to a detail view? Or just show in feed? For simplicity, we'll just show a snackbar.
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Reel by ${reel.user.username}')),
                     );
