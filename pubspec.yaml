@@ -9,7 +9,7 @@ dependencies:
   http: 
   image_picker: 
   video_player: 
-  cached_video_player: 
+  flutter_cache_manager: 
   provider: 
   shared_preferences: 
   flutter_staggered_grid_view: 
