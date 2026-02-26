@@ -14,6 +14,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // اضافه شد
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -323,8 +324,7 @@ class RssProvider extends ChangeNotifier {
   }
 
   Future<void> fetchRss(String channel, {bool force = false}) async {
-    final settings = Provider.container?.read<SettingsProvider>(); // نمی‌توانیم از Provider در اینجا استفاده کنیم، باید از طریق context یا جداگانه مدیریت کنیم.
-    // برای سادگی، از کش همیشه استفاده می‌کنیم و در صورت آنلاین بودن به‌روز می‌کنیم.
+    // خط مشکل‌دار حذف شد
     if (_loading[channel] == true) return;
     _loading[channel] = true;
     _errors[channel] = null;
