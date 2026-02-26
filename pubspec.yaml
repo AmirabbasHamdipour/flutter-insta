@@ -1,21 +1,43 @@
-name: instagram_reels_clone
-description: A Flutter client for Instagram Reels API
+name: rss_reader
+description: یک برنامه خواننده RSS با قابلیت‌های پیشرفته
 publish_to: 'none'
+version: 1.0.0+1
+
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.0.0 <4.0.0'
+
 dependencies:
   flutter:
     sdk: flutter
-  http: 
-  image_picker: 
-  video_player: 
-  flutter_cache_manager: 
-  provider: 
-  shared_preferences: 
-  flutter_staggered_grid_view: 
-  cached_network_image: 
-  intl: 
-  permission_handler: 
-  path_provider: 
+
+  # Networking
+  http:
+  xml:
+
+  # Local storage
+  hive:
+  hive_flutter:
+  path_provider:
+
+  # State management
+  provider:
+
+  # UI
+  cached_network_image:
+  flutter_html:
+  video_player:
+  chewie:
+  flutter_localizations:
+    sdk: flutter
+  intl:
+
+  # Settings
+  shared_preferences:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints:
+
 flutter:
   uses-material-design: true
