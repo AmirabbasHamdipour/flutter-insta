@@ -1,5 +1,5 @@
-name: rss_reader
-description: یک برنامه خواننده RSS با قابلیت‌های پیشرفته
+name: nokhod_news
+description: یک خبرخوان پیشرفته برای کانال‌های تلگرامی
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -30,6 +30,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl:
+  vazir_fonts:       # فونت وزیر
+  shamsi_date:       # تبدیل تاریخ شمسی
 
   # Settings
   shared_preferences:
