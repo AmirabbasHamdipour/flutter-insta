@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,14 +14,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:flutter_localizations/flutter_localizations.dart'; // اضافه شد
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shamsi_date/shamsi_date.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
-  await Hive.openBox<String>('rss_cache'); // برای ذخیره JSON آیتم‌ها
-  await Hive.openBox<String>('settings'); // برای تنظیمات
+  await Hive.openBox<String>('rss_cache');
+  await Hive.openBox<String>('settings');
   runApp(MyApp());
 }
 
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {
           return MaterialApp(
-            title: 'RSS Reader',
+            title: 'NokhodNews',
             debugShowCheckedModeBanner: false,
             theme: settings.lightTheme,
             darkTheme: settings.darkTheme,
@@ -107,6 +108,8 @@ class RssItem {
   final Enclosure? enclosure;
   final Statistics? statistics;
   final List<Reaction> reactions;
+  final String channel; // نام کانال برای ادغام
+
   RssItem({
     required this.title,
     required this.description,
@@ -116,7 +119,9 @@ class RssItem {
     this.enclosure,
     this.statistics,
     this.reactions = const [],
+    required this.channel,
   });
+
   Map<String, dynamic> toJson() => {
         'title': title,
         'description': description,
@@ -126,7 +131,9 @@ class RssItem {
         'enclosure': enclosure?.toJson(),
         'statistics': statistics?.toJson(),
         'reactions': reactions.map((r) => r.toJson()).toList(),
+        'channel': channel,
       };
+
   factory RssItem.fromJson(Map<String, dynamic> json) => RssItem(
         title: json['title'] as String,
         description: json['description'] as String,
@@ -136,12 +143,13 @@ class RssItem {
         enclosure: json['enclosure'] != null ? Enclosure.fromJson(json['enclosure']) : null,
         statistics: json['statistics'] != null ? Statistics.fromJson(json['statistics']) : null,
         reactions: (json['reactions'] as List?)?.map((e) => Reaction.fromJson(e)).toList() ?? [],
+        channel: json['channel'] as String,
       );
 }
 
 // =============== RSS Parser ===============
 
-Future<List<RssItem>> parseRss(String url) async {
+Future<List<RssItem>> parseRss(String url, String channelName) async {
   final response = await http.get(Uri.parse(url));
   if (response.statusCode != 200) throw Exception('Failed to load RSS');
   final document = xml.XmlDocument.parse(response.body);
@@ -197,6 +205,7 @@ Future<List<RssItem>> parseRss(String url) async {
       enclosure: parseEnclosure(),
       statistics: parseStatistics(),
       reactions: parseReactions(),
+      channel: channelName,
     );
   }).toList();
 }
@@ -208,17 +217,18 @@ class SettingsProvider extends ChangeNotifier {
   static const String _fontSizeKey = 'font_size';
   static const String _cacheEnabledKey = 'cache_enabled';
   static const String _activeChannelsKey = 'active_channels';
+  static const String _sortAscendingKey = 'sort_ascending';
+  static const String _itemsLimitKey = 'items_limit';
+  static const String _showThumbnailsKey = 'show_thumbnails';
 
   late SharedPreferences _prefs;
   ThemeMode _themeMode = ThemeMode.system;
   double _fontSize = 14.0;
   bool _cacheEnabled = true;
-  List<String> _activeChannels = [
-    'FO_RK',
-    'M0_HM',
-    'FarsiOfficialX',
-    'AdsVipz',
-  ];
+  List<String> _activeChannels = ['FO_RK', 'M0_HM', 'FarsiOfficialX', 'AdsVipz'];
+  bool _sortAscending = false; // false = نزولی (جدیدترین اول)
+  int _itemsLimit = 50; // تعداد آیتم در هر کانال
+  bool _showThumbnails = true;
 
   SettingsProvider() {
     _init();
@@ -230,6 +240,9 @@ class SettingsProvider extends ChangeNotifier {
     _fontSize = _prefs.getDouble(_fontSizeKey) ?? 14.0;
     _cacheEnabled = _prefs.getBool(_cacheEnabledKey) ?? true;
     _activeChannels = _prefs.getStringList(_activeChannelsKey) ?? _activeChannels;
+    _sortAscending = _prefs.getBool(_sortAscendingKey) ?? false;
+    _itemsLimit = _prefs.getInt(_itemsLimitKey) ?? 50;
+    _showThumbnails = _prefs.getBool(_showThumbnailsKey) ?? true;
     notifyListeners();
   }
 
@@ -237,16 +250,26 @@ class SettingsProvider extends ChangeNotifier {
   double get fontSize => _fontSize;
   bool get cacheEnabled => _cacheEnabled;
   List<String> get activeChannels => _activeChannels;
+  bool get sortAscending => _sortAscending;
+  int get itemsLimit => _itemsLimit;
+  bool get showThumbnails => _showThumbnails;
 
   ThemeData get lightTheme => ThemeData.light().copyWith(
         platform: TargetPlatform.iOS,
         typography: Typography.material2021(),
-        textTheme: ThemeData.light().textTheme.apply(fontSizeFactor: _fontSize / 14),
+        textTheme: ThemeData.light().textTheme.apply(
+              fontSizeFactor: _fontSize / 14,
+              fontFamily: 'Vazir',
+            ),
       );
+
   ThemeData get darkTheme => ThemeData.dark().copyWith(
         platform: TargetPlatform.iOS,
         typography: Typography.material2021(),
-        textTheme: ThemeData.dark().textTheme.apply(fontSizeFactor: _fontSize / 14),
+        textTheme: ThemeData.dark().textTheme.apply(
+              fontSizeFactor: _fontSize / 14,
+              fontFamily: 'Vazir',
+            ),
       );
 
   void setThemeMode(ThemeMode mode) {
@@ -273,6 +296,24 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSortAscending(bool ascending) {
+    _sortAscending = ascending;
+    _prefs.setBool(_sortAscendingKey, ascending);
+    notifyListeners();
+  }
+
+  void setItemsLimit(int limit) {
+    _itemsLimit = limit;
+    _prefs.setInt(_itemsLimitKey, limit);
+    notifyListeners();
+  }
+
+  void setShowThumbnails(bool show) {
+    _showThumbnails = show;
+    _prefs.setBool(_showThumbnailsKey, show);
+    notifyListeners();
+  }
+
   Future<void> clearCache() async {
     final box = Hive.box<String>('rss_cache');
     await box.clear();
@@ -291,22 +332,36 @@ class RssProvider extends ChangeNotifier {
     'AdsVipz',
   ];
 
-  final Map<String, String> channelUrls = const {
-    'FO_RK': 'https://tg.i-c-a.su/rss/FO_RK?limit=100',
-    'M0_HM': 'https://tg.i-c-a.su/rss/M0_HM?limit=100',
-    'FarsiOfficialX': 'https://tg.i-c-a.su/rss/FarsiOfficialX?limit=100',
-    'AdsVipz': 'https://tg.i-c-a.su/rss/AdsVipz?limit=100',
-  };
+  String _buildChannelUrl(String channel, int limit) {
+    return 'https://tg.i-c-a.su/rss/$channel?limit=$limit';
+  }
 
   List<RssItem> getItems(String channel) => _items[channel] ?? [];
   bool isLoading(String channel) => _loading[channel] ?? false;
   String? getError(String channel) => _errors[channel];
 
+  // آیتم‌های ادغام‌شده از همه کانال‌های فعال با مرتب‌سازی
+  List<RssItem> getMergedItems(List<String> activeChannels, bool ascending) {
+    final allItems = <RssItem>[];
+    for (var channel in activeChannels) {
+      allItems.addAll(getItems(channel));
+    }
+    allItems.sort((a, b) => ascending
+        ? a.pubDate.compareTo(b.pubDate)
+        : b.pubDate.compareTo(a.pubDate));
+    return allItems;
+  }
+
   RssProvider() {
     for (var channel in channels) {
       _loadCached(channel);
-      fetchRss(channel);
     }
+    // پس از بارگذاری کش، همه کانال‌ها را به‌روز می‌کنیم
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (var channel in channels) {
+        fetchRss(channel);
+      }
+    });
   }
 
   Future<void> _loadCached(String channel) async {
@@ -324,14 +379,17 @@ class RssProvider extends ChangeNotifier {
   }
 
   Future<void> fetchRss(String channel, {bool force = false}) async {
-    // خط مشکل‌دار حذف شد
     if (_loading[channel] == true) return;
     _loading[channel] = true;
     _errors[channel] = null;
     notifyListeners();
+
     try {
-      final url = channelUrls[channel]!;
-      final items = await parseRss(url);
+      final settings = Provider.container?.read<SettingsProvider>(); // دسترسی غیرمستقیم
+      // برای دسترسی به تنظیمات از context نمی‌توانیم اینجا استفاده کنیم، مقدار پیش‌فرض می‌گیریم
+      final limit = 50; // مقدار موقت، بعداً از طریق متد با پارامتر اصلاح می‌شود
+      final url = _buildChannelUrl(channel, limit);
+      final items = await parseRss(url, channel);
       _items[channel] = items;
       _errors[channel] = null;
 
@@ -341,12 +399,56 @@ class RssProvider extends ChangeNotifier {
       await box.put(channel, jsonStr);
     } catch (e) {
       _errors[channel] = e.toString();
-      // اگر خطا داشت و کش موجود است، همان را نگه می‌داریم
     } finally {
       _loading[channel] = false;
       notifyListeners();
     }
   }
+
+  // دریافت جزئیات یک خبر با id
+  Future<RssItem?> fetchSingleItem(String channel, int messageId) async {
+    try {
+      final url = 'https://tg.i-c-a.su/rss/$channel?id=$messageId&limit=1';
+      final items = await parseRss(url, channel);
+      if (items.isNotEmpty) return items.first;
+    } catch (e) {
+      debugPrint('Error fetching single item: $e');
+    }
+    return null;
+  }
+}
+
+// =============== Utility Functions ===============
+
+String relativeTimeJalali(DateTime date) {
+  final now = DateTime.now();
+  final diff = now.difference(date);
+  if (diff.inDays > 0) {
+    if (diff.inDays == 1) return 'دیروز';
+    if (diff.inDays < 7) return '${diff.inDays} روز پیش';
+    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} هفته پیش';
+    if (diff.inDays < 365) return '${(diff.inDays / 30).floor()} ماه پیش';
+    return '${(diff.inDays / 365).floor()} سال پیش';
+  } else if (diff.inHours > 0) {
+    return '${diff.inHours} ساعت پیش';
+  } else if (diff.inMinutes > 0) {
+    return '${diff.inMinutes} دقیقه پیش';
+  } else {
+    return 'چند لحظه پیش';
+  }
+}
+
+String fullJalaliDate(DateTime date) {
+  final j = Jalali.fromDateTime(date);
+  return '${j.day} ${j.monthName} ${j.year}';
+}
+
+int? extractMessageId(String link) {
+  final uri = Uri.tryParse(link);
+  if (uri != null && uri.pathSegments.isNotEmpty) {
+    return int.tryParse(uri.pathSegments.last);
+  }
+  return null;
 }
 
 // =============== Pages ===============
@@ -356,107 +458,76 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final List<String> _allChannels = const ['FO_RK', 'M0_HM', 'FarsiOfficialX', 'AdsVipz'];
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: _allChannels.length, vsync: this);
-  }
-
+class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
-    final activeChannels = settings.activeChannels;
-    final filteredChannels = _allChannels.where((c) => activeChannels.contains(c)).toList();
+    final rss = Provider.of<RssProvider>(context);
+
+    final mergedItems = rss.getMergedItems(settings.activeChannels, settings.sortAscending);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('خبرخوان RSS'),
-        bottom: filteredChannels.length > 1
-            ? TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabs: filteredChannels.map((c) => Tab(text: c)).toList(),
-              )
-            : null,
+        title: const Text('NokhodNews'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsPage())),
           ),
-        ],
-      ),
-      body: filteredChannels.isEmpty
-          ? const Center(child: Text('کانالی فعال نیست. به تنظیمات بروید.'))
-          : filteredChannels.length == 1
-              ? _buildChannelPage(filteredChannels.first)
-              : TabBarView(
-                  controller: _tabController,
-                  children: filteredChannels.map((c) => _buildChannelPage(c)).toList(),
-                ),
-    );
-  }
-
-  Widget _buildChannelPage(String channel) {
-    return Consumer2<RssProvider, SettingsProvider>(
-      builder: (context, rss, settings, _) {
-        final items = rss.getItems(channel);
-        final loading = rss.isLoading(channel);
-        final error = rss.getError(channel);
-
-        if (loading && items.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (error != null && items.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('خطا: $error'),
-                ElevatedButton(
-                  onPressed: () => rss.fetchRss(channel, force: true),
-                  child: const Text('تلاش مجدد'),
-                ),
-              ],
-            ),
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: () => rss.fetchRss(channel, force: true),
-          child: ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return ItemCard(item: item, channel: channel);
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              for (var channel in settings.activeChannels) {
+                rss.fetchRss(channel, force: true);
+              }
             },
           ),
-        );
-      },
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          for (var channel in settings.activeChannels) {
+            await rss.fetchRss(channel, force: true);
+          }
+        },
+        child: mergedItems.isEmpty
+            ? Center(
+                child: settings.activeChannels.isEmpty
+                    ? const Text('کانالی فعال نیست. به تنظیمات بروید.')
+                    : const CircularProgressIndicator(),
+              )
+            : ListView.builder(
+                itemCount: mergedItems.length,
+                itemBuilder: (context, index) {
+                  final item = mergedItems[index];
+                  return ItemCard(item: item);
+                },
+              ),
+      ),
     );
   }
 }
 
 class ItemCard extends StatelessWidget {
   final RssItem item;
-  final String channel;
-  const ItemCard({Key? key, required this.item, required this.channel}) : super(key: key);
+  const ItemCard({Key? key, required this.item}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context);
     return Card(
       margin: const EdgeInsets.all(8),
       child: InkWell(
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => DetailPage(item: item, channel: channel)),
+          MaterialPageRoute(builder: (_) => DetailPage(item: item)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (item.enclosure != null && item.enclosure!.type.startsWith('image/'))
+            if (settings.showThumbnails &&
+                item.enclosure != null &&
+                item.enclosure!.type.startsWith('image/'))
               CachedNetworkImage(
                 imageUrl: item.enclosure!.url,
                 placeholder: (_, __) => Container(height: 200, color: Colors.grey[300]),
@@ -464,17 +535,17 @@ class ItemCard extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: double.infinity,
               ),
-            if (item.enclosure != null && item.enclosure!.type.startsWith('video/'))
+            if (settings.showThumbnails &&
+                item.enclosure != null &&
+                item.enclosure!.type.startsWith('video/'))
               Container(
                 height: 200,
                 color: Colors.black,
                 child: Center(
-                  child: IconButton(
-                    icon: const Icon(Icons.play_circle_fill, size: 50, color: Colors.white),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => DetailPage(item: item, channel: channel)),
-                    ),
+                  child: Icon(
+                    Icons.play_circle_fill,
+                    size: 50,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -490,29 +561,19 @@ class ItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    DateFormat.yMMMd('fa').add_jm().format(item.pubDate),
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Row(
+                    children: [
+                      Text(
+                        relativeTimeJalali(item.pubDate),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '• ${item.channel}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  if (item.statistics != null)
-                    Row(
-                      children: [
-                        _statChip(Icons.visibility, item.statistics!.views),
-                        const SizedBox(width: 8),
-                        _statChip(Icons.share, item.statistics!.forwards),
-                        const SizedBox(width: 8),
-                        _statChip(Icons.favorite, item.statistics!.favorites),
-                      ],
-                    ),
-                  if (item.reactions.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: item.reactions.map((r) => Chip(label: Text('${r.emoji} ${r.count}'))).toList(),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -521,43 +582,54 @@ class ItemCard extends StatelessWidget {
       ),
     );
   }
-
-  Widget _statChip(IconData icon, int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 4),
-          Text(count.toString()),
-        ],
-      ),
-    );
-  }
 }
 
 class DetailPage extends StatefulWidget {
   final RssItem item;
-  final String channel;
-  const DetailPage({Key? key, required this.item, required this.channel}) : super(key: key);
+  const DetailPage({Key? key, required this.item}) : super(key: key);
 
   @override
   _DetailPageState createState() => _DetailPageState();
 }
 
 class _DetailPageState extends State<DetailPage> {
+  RssItem? _detailedItem;
+  bool _loading = false;
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
 
   @override
   void initState() {
     super.initState();
-    if (widget.item.enclosure?.type.startsWith('video/') ?? false) {
-      _videoController = VideoPlayerController.network(widget.item.enclosure!.url);
+    _fetchDetailedItem();
+  }
+
+  Future<void> _fetchDetailedItem() async {
+    final messageId = extractMessageId(widget.item.link);
+    if (messageId == null) return;
+
+    setState(() => _loading = true);
+    try {
+      final rss = Provider.of<RssProvider>(context, listen: false);
+      final detailed = await rss.fetchSingleItem(widget.item.channel, messageId);
+      if (detailed != null) {
+        setState(() {
+          _detailedItem = detailed;
+          _loading = false;
+        });
+        _initVideoIfNeeded();
+      } else {
+        setState(() => _loading = false);
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _initVideoIfNeeded() {
+    final item = _detailedItem ?? widget.item;
+    if (item.enclosure?.type.startsWith('video/') ?? false) {
+      _videoController = VideoPlayerController.network(item.enclosure!.url);
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: false,
@@ -578,95 +650,64 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final item = _detailedItem ?? widget.item;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('جزئیات خبر'),
+        title: const Text('جزئیات خبر'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.item.title,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              DateFormat.yMMMd('fa').add_jm().format(widget.item.pubDate),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            if (widget.item.enclosure != null && widget.item.enclosure!.type.startsWith('image/'))
-              CachedNetworkImage(
-                imageUrl: widget.item.enclosure!.url,
-                placeholder: (_, __) => Container(height: 300, color: Colors.grey[300]),
-                errorWidget: (_, __, ___) => Container(height: 300, color: Colors.grey[300], child: const Icon(Icons.broken_image)),
-                fit: BoxFit.contain,
-              ),
-            if (widget.item.enclosure != null && widget.item.enclosure!.type.startsWith('video/') && _chewieController != null)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Chewie(controller: _chewieController!),
-              ),
-            const SizedBox(height: 16),
-            Html(
-              data: widget.item.description,
-              style: {
-                'body': Style(
-                  fontSize: FontSize(Provider.of<SettingsProvider>(context).fontSize),
-                  lineHeight: LineHeight(1.6),
-                  textAlign: TextAlign.right,
-                ),
-              },
-            ),
-            const SizedBox(height: 24),
-            if (widget.item.statistics != null) ...[
-              Text('آمار:', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Row(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _statBox(Icons.visibility, widget.item.statistics!.views),
-                  const SizedBox(width: 16),
-                  _statBox(Icons.share, widget.item.statistics!.forwards),
-                  const SizedBox(width: 16),
-                  _statBox(Icons.favorite, widget.item.statistics!.favorites),
+                  Text(
+                    item.title,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        fullJalaliDate(item.pubDate),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '(${relativeTimeJalali(item.pubDate)})',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (item.enclosure != null && item.enclosure!.type.startsWith('image/'))
+                    CachedNetworkImage(
+                      imageUrl: item.enclosure!.url,
+                      placeholder: (_, __) => Container(height: 300, color: Colors.grey[300]),
+                      errorWidget: (_, __, ___) => Container(height: 300, color: Colors.grey[300], child: const Icon(Icons.broken_image)),
+                      fit: BoxFit.contain,
+                    ),
+                  if (item.enclosure != null && item.enclosure!.type.startsWith('video/') && _chewieController != null)
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Chewie(controller: _chewieController!),
+                    ),
+                  const SizedBox(height: 16),
+                  Html(
+                    data: item.description,
+                    style: {
+                      'body': Style(
+                        fontSize: FontSize(Provider.of<SettingsProvider>(context).fontSize),
+                        lineHeight: LineHeight(1.6),
+                        textAlign: TextAlign.right,
+                      ),
+                    },
+                  ),
                 ],
               ),
-            ],
-            if (widget.item.reactions.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('واکنش‌ها:', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: widget.item.reactions.map((r) => Chip(
-                  label: Text('${r.emoji} ${r.count}'),
-                  backgroundColor: Colors.grey[200],
-                )).toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _statBox(IconData icon, int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 4),
-          Text(count.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
+            ),
     );
   }
 }
@@ -726,6 +767,37 @@ class _SettingsPageState extends State<SettingsPage> {
                 divisions: 10,
                 label: settings.fontSize.toStringAsFixed(1),
                 onChanged: (v) => settings.setFontSize(v),
+              ),
+              const Divider(),
+              const Text('مرتب‌سازی', style: TextStyle(fontWeight: FontWeight.bold)),
+              RadioListTile<bool>(
+                title: const Text('جدیدترین اول'),
+                value: false,
+                groupValue: settings.sortAscending,
+                onChanged: (v) => settings.setSortAscending(v!),
+              ),
+              RadioListTile<bool>(
+                title: const Text('قدیمی‌ترین اول'),
+                value: true,
+                groupValue: settings.sortAscending,
+                onChanged: (v) => settings.setSortAscending(v!),
+              ),
+              const Divider(),
+              const Text('تعداد آیتم در هر کانال', style: TextStyle(fontWeight: FontWeight.bold)),
+              Slider(
+                value: settings.itemsLimit.toDouble(),
+                min: 20,
+                max: 100,
+                divisions: 4,
+                label: settings.itemsLimit.toString(),
+                onChanged: (v) => settings.setItemsLimit(v.round()),
+              ),
+              const Divider(),
+              const Text('نمایش تصاویر', style: TextStyle(fontWeight: FontWeight.bold)),
+              SwitchListTile(
+                title: const Text('نمایش تصاویر بندانگشتی در لیست'),
+                value: settings.showThumbnails,
+                onChanged: (v) => settings.setShowThumbnails(v),
               ),
               const Divider(),
               const Text('کش کردن', style: TextStyle(fontWeight: FontWeight.bold)),
