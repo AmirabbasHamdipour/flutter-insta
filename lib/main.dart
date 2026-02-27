@@ -59,7 +59,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// =============== Models ===============
+// =============== Models (با تبدیل ایمن) ===============
 
 class Enclosure {
   final String url;
@@ -67,11 +67,19 @@ class Enclosure {
   final int length;
   Enclosure({required this.url, required this.type, required this.length});
   Map<String, dynamic> toJson() => {'url': url, 'type': type, 'length': length};
-  factory Enclosure.fromJson(Map<String, dynamic> json) => Enclosure(
-        url: json['url'] as String,
-        type: json['type'] as String,
-        length: json['length'] as int,
-      );
+  factory Enclosure.fromJson(Map<String, dynamic> json) {
+    // تبدیل ایمن length
+    int parseLength(dynamic value) {
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+    return Enclosure(
+      url: json['url'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      length: parseLength(json['length']),
+    );
+  }
 }
 
 class Statistics {
@@ -80,11 +88,18 @@ class Statistics {
   final int views;
   Statistics({required this.favorites, required this.forwards, required this.views});
   Map<String, dynamic> toJson() => {'favorites': favorites, 'forwards': forwards, 'views': views};
-  factory Statistics.fromJson(Map<String, dynamic> json) => Statistics(
-        favorites: json['favorites'] as int,
-        forwards: json['forwards'] as int,
-        views: json['views'] as int,
-      );
+  factory Statistics.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+    return Statistics(
+      favorites: parseInt(json['favorites']),
+      forwards: parseInt(json['forwards']),
+      views: parseInt(json['views']),
+    );
+  }
 }
 
 class Reaction {
@@ -92,10 +107,17 @@ class Reaction {
   final String emoji;
   Reaction({required this.count, required this.emoji});
   Map<String, dynamic> toJson() => {'count': count, 'emoji': emoji};
-  factory Reaction.fromJson(Map<String, dynamic> json) => Reaction(
-        count: json['count'] as int,
-        emoji: json['emoji'] as String,
-      );
+  factory Reaction.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+    return Reaction(
+      count: parseInt(json['count']),
+      emoji: json['emoji'] as String? ?? '',
+    );
+  }
 }
 
 class NewsItem {
@@ -131,7 +153,6 @@ class NewsItem {
       };
 
   factory NewsItem.fromJson(Map<String, dynamic> json) {
-    // تاریخ را از فیلد pubDate که مثلاً "Fri, 27 Feb 2026 13:02:22 +0300" است، parse می‌کنیم.
     DateTime parseDate(String dateStr) {
       try {
         return DateFormat('EEE, dd MMM yyyy HH:mm:ss Z').parse(dateStr, true);
@@ -143,12 +164,12 @@ class NewsItem {
     return NewsItem(
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      pubDate: parseDate(json['pubDate'] as String),
-      link: json['link'] as String,
-      guid: json['guid'] as String,
+      pubDate: parseDate(json['pubDate'] as String? ?? ''),
+      link: json['link'] as String? ?? '',
+      guid: json['guid'] as String? ?? '',
       enclosure: json['enclosure'] != null ? Enclosure.fromJson(json['enclosure']) : null,
       reactions: (json['reactions'] as List?)?.map((e) => Reaction.fromJson(e)).toList() ?? [],
-      statistics: Statistics.fromJson(json['statistics']),
+      statistics: Statistics.fromJson(json['statistics'] ?? {}),
     );
   }
 }
