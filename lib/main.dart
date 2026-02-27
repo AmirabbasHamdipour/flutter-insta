@@ -202,7 +202,7 @@ class SettingsProvider extends ChangeNotifier {
         typography: Typography.material2021(),
         textTheme: ThemeData.light().textTheme.apply(
               fontSizeFactor: _fontSize / 14,
-              fontFamily: 'Vazir',
+              fontFamily: 'Vazir', // فعال شد
             ),
       );
 
@@ -211,7 +211,7 @@ class SettingsProvider extends ChangeNotifier {
         typography: Typography.material2021(),
         textTheme: ThemeData.dark().textTheme.apply(
               fontSizeFactor: _fontSize / 14,
-              fontFamily: 'Vazir',
+              fontFamily: 'Vazir', // فعال شد
             ),
       );
 
@@ -365,7 +365,6 @@ String relativeTimeJalali(DateTime date) {
   }
 }
 
-// لیست ماه‌های شمسی
 const _persianMonths = [
   'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
   'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
