@@ -75,29 +75,8 @@ class Enclosure {
       );
 }
 
-class Statistics {
-  final int views;
-  final int forwards;
-  final int favorites;
-  Statistics({required this.views, required this.forwards, required this.favorites});
-  Map<String, dynamic> toJson() => {'views': views, 'forwards': forwards, 'favorites': favorites};
-  factory Statistics.fromJson(Map<String, dynamic> json) => Statistics(
-        views: json['views'] as int,
-        forwards: json['forwards'] as int,
-        favorites: json['favorites'] as int,
-      );
-}
-
-class Reaction {
-  final String emoji;
-  final int count;
-  Reaction({required this.emoji, required this.count});
-  Map<String, dynamic> toJson() => {'emoji': emoji, 'count': count};
-  factory Reaction.fromJson(Map<String, dynamic> json) => Reaction(
-        emoji: json['emoji'] as String,
-        count: json['count'] as int,
-      );
-}
+// Statistics و Reaction حذف شدند چون نیازی به آن‌ها نیست
+// اما برای سازگاری با کد قبلی می‌توان نگه داشت، اما استفاده نمی‌شوند.
 
 class RssItem {
   final String title;
@@ -106,9 +85,7 @@ class RssItem {
   final String link;
   final String guid;
   final Enclosure? enclosure;
-  final Statistics? statistics;
-  final List<Reaction> reactions;
-  final String channel; // نام کانال برای ادغام
+  final String channel;
 
   RssItem({
     required this.title,
@@ -117,8 +94,6 @@ class RssItem {
     required this.link,
     required this.guid,
     this.enclosure,
-    this.statistics,
-    this.reactions = const [],
     required this.channel,
   });
 
@@ -129,8 +104,6 @@ class RssItem {
         'link': link,
         'guid': guid,
         'enclosure': enclosure?.toJson(),
-        'statistics': statistics?.toJson(),
-        'reactions': reactions.map((r) => r.toJson()).toList(),
         'channel': channel,
       };
 
@@ -141,8 +114,6 @@ class RssItem {
         link: json['link'] as String,
         guid: json['guid'] as String,
         enclosure: json['enclosure'] != null ? Enclosure.fromJson(json['enclosure']) : null,
-        statistics: json['statistics'] != null ? Statistics.fromJson(json['statistics']) : null,
-        reactions: (json['reactions'] as List?)?.map((e) => Reaction.fromJson(e)).toList() ?? [],
         channel: json['channel'] as String,
       );
 }
@@ -173,29 +144,6 @@ Future<List<RssItem>> parseRss(String url, String channelName) async {
         length: int.tryParse(enc.getAttribute('length') ?? '0') ?? 0,
       );
     }
-    Statistics? parseStatistics() {
-      final community = item.findElements('community', namespace: 'https://www.rssboard.org/media-rss').firstOrNull;
-      if (community == null) return null;
-      final stats = community.findElements('statistics', namespace: 'https://www.rssboard.org/media-rss').firstOrNull;
-      if (stats == null) return null;
-      return Statistics(
-        views: int.tryParse(stats.getAttribute('views') ?? '0') ?? 0,
-        forwards: int.tryParse(stats.getAttribute('forwards') ?? '0') ?? 0,
-        favorites: int.tryParse(stats.getAttribute('favorites') ?? '0') ?? 0,
-      );
-    }
-    List<Reaction> parseReactions() {
-      final community = item.findElements('community', namespace: 'https://www.rssboard.org/media-rss').firstOrNull;
-      if (community == null) return [];
-      final reactionsElem = community.findElements('reactions', namespace: 'https://www.rssboard.org/media-rss').firstOrNull;
-      if (reactionsElem == null) return [];
-      return reactionsElem.findElements('reaction', namespace: 'https://www.rssboard.org/media-rss').map((r) {
-        return Reaction(
-          emoji: r.getAttribute('emoji') ?? '',
-          count: int.tryParse(r.getAttribute('count') ?? '0') ?? 0,
-        );
-      }).toList();
-    }
     return RssItem(
       title: getText('title'),
       description: getText('description'),
@@ -203,8 +151,6 @@ Future<List<RssItem>> parseRss(String url, String channelName) async {
       link: getText('link'),
       guid: getText('guid'),
       enclosure: parseEnclosure(),
-      statistics: parseStatistics(),
-      reactions: parseReactions(),
       channel: channelName,
     );
   }).toList();
@@ -227,7 +173,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _cacheEnabled = true;
   List<String> _activeChannels = ['FO_RK', 'M0_HM', 'FarsiOfficialX', 'AdsVipz'];
   bool _sortAscending = false; // false = نزولی (جدیدترین اول)
-  int _itemsLimit = 50; // تعداد آیتم در هر کانال
+  int _itemsLimit = 50;
   bool _showThumbnails = true;
 
   SettingsProvider() {
@@ -259,7 +205,7 @@ class SettingsProvider extends ChangeNotifier {
         typography: Typography.material2021(),
         textTheme: ThemeData.light().textTheme.apply(
               fontSizeFactor: _fontSize / 14,
-              fontFamily: 'Vazir',
+              fontFamily: 'Vazir', // استفاده از فونت وزیر
             ),
       );
 
@@ -332,10 +278,6 @@ class RssProvider extends ChangeNotifier {
     'AdsVipz',
   ];
 
-  String _buildChannelUrl(String channel, int limit) {
-    return 'https://tg.i-c-a.su/rss/$channel?limit=$limit';
-  }
-
   List<RssItem> getItems(String channel) => _items[channel] ?? [];
   bool isLoading(String channel) => _loading[channel] ?? false;
   String? getError(String channel) => _errors[channel];
@@ -356,12 +298,7 @@ class RssProvider extends ChangeNotifier {
     for (var channel in channels) {
       _loadCached(channel);
     }
-    // پس از بارگذاری کش، همه کانال‌ها را به‌روز می‌کنیم
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (var channel in channels) {
-        fetchRss(channel);
-      }
-    });
+    // بارگذاری اولیه بعد از اینکه provider ساخته شد، در صفحه اصلی انجام می‌شود
   }
 
   Future<void> _loadCached(String channel) async {
@@ -378,17 +315,15 @@ class RssProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchRss(String channel, {bool force = false}) async {
+  // دریافت RSS با تعداد مشخص
+  Future<void> fetchRss(String channel, int limit, {bool force = false}) async {
     if (_loading[channel] == true) return;
     _loading[channel] = true;
     _errors[channel] = null;
     notifyListeners();
 
     try {
-      final settings = Provider.container?.read<SettingsProvider>(); // دسترسی غیرمستقیم
-      // برای دسترسی به تنظیمات از context نمی‌توانیم اینجا استفاده کنیم، مقدار پیش‌فرض می‌گیریم
-      final limit = 50; // مقدار موقت، بعداً از طریق متد با پارامتر اصلاح می‌شود
-      final url = _buildChannelUrl(channel, limit);
+      final url = 'https://tg.i-c-a.su/rss/$channel?limit=$limit';
       final items = await parseRss(url, channel);
       _items[channel] = items;
       _errors[channel] = null;
@@ -459,6 +394,22 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  bool _initialFetchDone = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialFetchDone) {
+      _initialFetchDone = true;
+      // بارگذاری اولیه با استفاده از تنظیمات فعلی
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final rss = Provider.of<RssProvider>(context, listen: false);
+      for (var channel in settings.activeChannels) {
+        rss.fetchRss(channel, settings.itemsLimit);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
@@ -472,13 +423,16 @@ class _HomePageState extends State<HomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsPage())),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => SettingsPage()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
               for (var channel in settings.activeChannels) {
-                rss.fetchRss(channel, force: true);
+                rss.fetchRss(channel, settings.itemsLimit, force: true);
               }
             },
           ),
@@ -487,7 +441,7 @@ class _HomePageState extends State<HomePage> {
       body: RefreshIndicator(
         onRefresh: () async {
           for (var channel in settings.activeChannels) {
-            await rss.fetchRss(channel, force: true);
+            await rss.fetchRss(channel, settings.itemsLimit, force: true);
           }
         },
         child: mergedItems.isEmpty
@@ -832,6 +786,11 @@ class _SettingsPageState extends State<SettingsPage> {
               ElevatedButton(
                 onPressed: () {
                   settings.setActiveChannels(_tempChannels);
+                  // پس از تغییر کانال‌ها، محتوای جدید دریافت شود
+                  final rss = Provider.of<RssProvider>(context, listen: false);
+                  for (var channel in _tempChannels) {
+                    rss.fetchRss(channel, settings.itemsLimit, force: true);
+                  }
                   Navigator.pop(context);
                 },
                 child: const Text('ذخیره تغییرات کانال‌ها'),
