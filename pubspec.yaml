@@ -30,7 +30,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl:
-  vazir_fonts:       # فونت وزیر
   shamsi_date:       # تبدیل تاریخ شمسی
 
   # Settings
@@ -43,3 +42,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # تعریف فونت وزیر (فایل‌ها را در پوشه fonts قرار دهید)
+  fonts:
+    - family: Vazir
+      fonts:
+        - asset: fonts/Vazir.ttf
