@@ -43,8 +43,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # تعریف فونت وزیر (فایل‌ها را در پوشه fonts قرار دهید)
+  # تعریف فونت وزیر (فایل در مسیر assets/fonts/Vazir.ttf)
   fonts:
     - family: Vazir
       fonts:
-        - asset: fonts/Vazir.ttf
+        - asset: assets/fonts/Vazir.ttf
