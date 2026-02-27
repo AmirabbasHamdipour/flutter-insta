@@ -75,9 +75,6 @@ class Enclosure {
       );
 }
 
-// Statistics و Reaction حذف شدند چون نیازی به آن‌ها نیست
-// اما برای سازگاری با کد قبلی می‌توان نگه داشت، اما استفاده نمی‌شوند.
-
 class RssItem {
   final String title;
   final String description;
@@ -205,7 +202,7 @@ class SettingsProvider extends ChangeNotifier {
         typography: Typography.material2021(),
         textTheme: ThemeData.light().textTheme.apply(
               fontSizeFactor: _fontSize / 14,
-              fontFamily: 'Vazir', // استفاده از فونت وزیر
+              fontFamily: 'Vazir',
             ),
       );
 
@@ -282,7 +279,6 @@ class RssProvider extends ChangeNotifier {
   bool isLoading(String channel) => _loading[channel] ?? false;
   String? getError(String channel) => _errors[channel];
 
-  // آیتم‌های ادغام‌شده از همه کانال‌های فعال با مرتب‌سازی
   List<RssItem> getMergedItems(List<String> activeChannels, bool ascending) {
     final allItems = <RssItem>[];
     for (var channel in activeChannels) {
@@ -298,7 +294,6 @@ class RssProvider extends ChangeNotifier {
     for (var channel in channels) {
       _loadCached(channel);
     }
-    // بارگذاری اولیه بعد از اینکه provider ساخته شد، در صفحه اصلی انجام می‌شود
   }
 
   Future<void> _loadCached(String channel) async {
@@ -315,7 +310,6 @@ class RssProvider extends ChangeNotifier {
     }
   }
 
-  // دریافت RSS با تعداد مشخص
   Future<void> fetchRss(String channel, int limit, {bool force = false}) async {
     if (_loading[channel] == true) return;
     _loading[channel] = true;
@@ -328,7 +322,6 @@ class RssProvider extends ChangeNotifier {
       _items[channel] = items;
       _errors[channel] = null;
 
-      // ذخیره در کش
       final box = Hive.box<String>('rss_cache');
       final jsonStr = jsonEncode(items.map((i) => i.toJson()).toList());
       await box.put(channel, jsonStr);
@@ -340,7 +333,6 @@ class RssProvider extends ChangeNotifier {
     }
   }
 
-  // دریافت جزئیات یک خبر با id
   Future<RssItem?> fetchSingleItem(String channel, int messageId) async {
     try {
       final url = 'https://tg.i-c-a.su/rss/$channel?id=$messageId&limit=1';
@@ -373,9 +365,15 @@ String relativeTimeJalali(DateTime date) {
   }
 }
 
+// لیست ماه‌های شمسی
+const _persianMonths = [
+  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+];
+
 String fullJalaliDate(DateTime date) {
   final j = Jalali.fromDateTime(date);
-  return '${j.day} ${j.monthName} ${j.year}';
+  return '${j.day} ${_persianMonths[j.month - 1]} ${j.year}';
 }
 
 int? extractMessageId(String link) {
@@ -401,7 +399,6 @@ class _HomePageState extends State<HomePage> {
     super.didChangeDependencies();
     if (!_initialFetchDone) {
       _initialFetchDone = true;
-      // بارگذاری اولیه با استفاده از تنظیمات فعلی
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       final rss = Provider.of<RssProvider>(context, listen: false);
       for (var channel in settings.activeChannels) {
@@ -786,7 +783,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ElevatedButton(
                 onPressed: () {
                   settings.setActiveChannels(_tempChannels);
-                  // پس از تغییر کانال‌ها، محتوای جدید دریافت شود
                   final rss = Provider.of<RssProvider>(context, listen: false);
                   for (var channel in _tempChannels) {
                     rss.fetchRss(channel, settings.itemsLimit, force: true);
