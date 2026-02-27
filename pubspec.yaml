@@ -11,33 +11,33 @@ dependencies:
     sdk: flutter
 
   # Networking
-  http: ^1.2.2
+  http:
 
   # Local storage
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
-  path_provider: ^2.1.5
+  hive:
+  hive_flutter:
+  path_provider:
 
   # State management
-  provider: ^6.1.2
+  provider:
 
   # UI
-  cached_network_image: ^3.4.1
-  flutter_html: ^3.0.0-beta.2
-  video_player: ^2.9.2
-  chewie: ^1.8.5
+  cached_network_image:
+  flutter_html:
+  video_player:
+  chewie:
   flutter_localizations:
     sdk: flutter
-  intl: ^0.19.0
-  shamsi_date: ^1.1.0
+  intl:
+  shamsi_date:
 
   # Settings
-  shared_preferences: ^2.3.2
+  shared_preferences:
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints:
 
 flutter:
   uses-material-design: true
