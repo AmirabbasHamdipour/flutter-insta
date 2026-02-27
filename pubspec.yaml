@@ -1,5 +1,5 @@
 name: nokhod_news
-description: یک خبرخوان پیشرفته برای کانال‌های تلگرامی
+description: یک خبرخوان پیشرفته با استفاده از API
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,39 +11,38 @@ dependencies:
     sdk: flutter
 
   # Networking
-  http:
-  xml:
+  http: ^1.2.2
 
   # Local storage
-  hive:
-  hive_flutter:
-  path_provider:
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
 
   # State management
-  provider:
+  provider: ^6.1.2
 
   # UI
-  cached_network_image:
-  flutter_html:
-  video_player:
-  chewie:
+  cached_network_image: ^3.4.1
+  flutter_html: ^3.0.0-beta.2
+  video_player: ^2.9.2
+  chewie: ^1.8.5
   flutter_localizations:
     sdk: flutter
-  intl:
-  shamsi_date:       # تبدیل تاریخ شمسی
+  intl: ^0.19.0
+  shamsi_date: ^1.1.0
 
   # Settings
-  shared_preferences:
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints:
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
 
-  # تعریف فونت وزیر (فایل در مسیر assets/fonts/Vazir.ttf)
+  # فونت وزیر (فایل را در assets/fonts/Vazir.ttf قرار دهید)
   fonts:
     - family: Vazir
       fonts:
