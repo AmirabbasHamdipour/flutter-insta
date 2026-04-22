@@ -16,7 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true   # توکن برای push بعدی حفظ شود
+          persist-credentials: true
+
+      # تعریف مسیر فایل لاگ (نام ثابت برای راحتی؛ می‌توان تاریخ/زمان اضافه کرد)
+      - name: Set log file path
+        run: echo "LOG_FILE=build_log.txt" >> $GITHUB_ENV
+
+      # پاک‌سازی فایل لاگ قبلی (در صورت وجود) و شروع لاگ‌گیری کلی با هدایت خروجی‌ها
+      - name: Initialize log file
+        run: |
+          echo "=== Flutter Build Log - $(date) ===" > ${{ env.LOG_FILE }}
+          echo "Repository: $GITHUB_REPOSITORY" >> ${{ env.LOG_FILE }}
+          echo "Branch: $GITHUB_REF" >> ${{ env.LOG_FILE }}
+          echo "Workflow: $GITHUB_WORKFLOW" >> ${{ env.LOG_FILE }}
+          echo "Run ID: $GITHUB_RUN_ID" >> ${{ env.LOG_FILE }}
+          echo "===================================" >> ${{ env.LOG_FILE }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2.14.0
@@ -28,19 +42,23 @@ jobs:
       - name: Check if Flutter project exists
         id: check_project
         run: |
+          echo "Checking for pubspec.yaml..." | tee -a ${{ env.LOG_FILE }}
           if [ -f "pubspec.yaml" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Project found." | tee -a ${{ env.LOG_FILE }}
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ No pubspec.yaml found. Will create new project." | tee -a ${{ env.LOG_FILE }}
           fi
 
       - name: Create new Flutter project
         if: steps.check_project.outputs.exists == 'false'
         run: |
+          echo "Creating Flutter project..." | tee -a ${{ env.LOG_FILE }}
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           PROJECT_NAME=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/^[0-9]/_/')
           [ -z "$PROJECT_NAME" ] && PROJECT_NAME="my_flutter_app"
-          flutter create --org com.example.app --project-name "$PROJECT_NAME" .
+          flutter create --org com.example.app --project-name "$PROJECT_NAME" . 2>&1 | tee -a ${{ env.LOG_FILE }}
 
       - name: Commit and push new Flutter project
         if: steps.check_project.outputs.exists == 'false'
@@ -52,43 +70,57 @@ jobs:
           git push
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          echo "📦 Installing dependencies..." | tee -a ${{ env.LOG_FILE }}
+          flutter pub get 2>&1 | tee -a ${{ env.LOG_FILE }}
 
       # اجرای شرطی ابزارهای اختیاری
       - name: Generate launcher icons (if configured)
         run: |
           if grep -q "flutter_launcher_icons" pubspec.yaml; then
-            dart run flutter_launcher_icons
+            echo "🖼️ Generating launcher icons..." | tee -a ${{ env.LOG_FILE }}
+            dart run flutter_launcher_icons 2>&1 | tee -a ${{ env.LOG_FILE }}
           else
-            echo "flutter_launcher_icons not found, skipping."
+            echo "ℹ️ flutter_launcher_icons not found, skipping." | tee -a ${{ env.LOG_FILE }}
           fi
 
       - name: Run build_runner (if configured)
         run: |
           if grep -q "build_runner" pubspec.yaml; then
-            flutter pub run build_runner build --delete-conflicting-outputs
+            echo "🏗️ Running build_runner..." | tee -a ${{ env.LOG_FILE }}
+            flutter pub run build_runner build --delete-conflicting-outputs 2>&1 | tee -a ${{ env.LOG_FILE }}
           else
-            echo "build_runner not found, skipping."
+            echo "ℹ️ build_runner not found, skipping." | tee -a ${{ env.LOG_FILE }}
           fi
 
-      # ساخت APK‌های تفکیک‌شده بر اساس معماری (حجم کمتر)
+      # ساخت APK‌های تفکیک‌شده بر اساس معماری
       - name: Build Release APKs (split per ABI)
-        run: flutter build apk --release --split-per-abi
+        run: |
+          echo "🔨 Building APKs..." | tee -a ${{ env.LOG_FILE }}
+          flutter build apk --release --split-per-abi 2>&1 | tee -a ${{ env.LOG_FILE }}
 
       # آماده‌سازی پوشه apk در ریشه مخزن
       - name: Prepare APK directory
         run: |
           mkdir -p apk
-          rm -f apk/*.apk   # حذف فایل‌های قدیمی
+          rm -f apk/*.apk
 
       - name: Copy APKs to repository folder
         run: cp build/app/outputs/flutter-apk/*.apk apk/
 
-      # ذخیره فایل‌ها در مخزن (overwrite)
-      - name: Commit and push APKs to repository
+      # ذخیره لاگ نهایی در فایل متنی (همراه با تاریخ اتمام)
+      - name: Finalize log file
+        run: |
+          echo "===================================" >> ${{ env.LOG_FILE }}
+          echo "Build completed at $(date)" >> ${{ env.LOG_FILE }}
+          echo "Log file size: $(du -h ${{ env.LOG_FILE }} | cut -f1)" >> ${{ env.LOG_FILE }}
+
+      # کامیت و push همزمان APK و فایل لاگ به مخزن
+      - name: Commit and push APKs + build log to repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f apk/*.apk                     # افزودن حتی اگر در .gitignore باشد
-          git commit -m "📦 Update APK builds [skip ci]" || echo "No changes to commit"
+          git add -f apk/*.apk
+          git add -f ${{ env.LOG_FILE }}
+          git commit -m "📦 Update APK builds & build log [skip ci]" || echo "No changes to commit"
           git push
