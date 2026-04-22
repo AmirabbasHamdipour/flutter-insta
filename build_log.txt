@@ -1,0 +1,176 @@
+=== Flutter Build Log - Wed Apr 22 20:46:55 UTC 2026 ===
+Repository: AmirabbasHamdipour/flutter-insta
+Branch: refs/heads/main
+Workflow: Flutter Android Build + Push APK to Repo
+Run ID: 24801817816
+===================================
+Checking for pubspec.yaml...
+✅ Project found.
+📦 Installing dependencies...
+Resolving dependencies...
+Downloading packages...
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cached_network_image 3.4.1
++ cached_network_image_platform_interface 4.1.1
++ cached_network_image_web 1.3.1
++ characters 1.4.1
++ clock 1.1.2
++ code_assets 1.0.0
++ collection 1.19.1
++ cookie_jar 4.0.9
++ cross_file 0.3.5+2
++ crypto 3.0.7
++ csslib 1.0.2
++ dio 5.9.2
++ dio_cookie_manager 3.4.0
++ dio_web_adapter 2.1.2
++ fake_async 1.3.3
++ ffi 2.2.0
++ ffi_leak_tracker 0.1.2
++ file 7.0.1
++ file_selector_linux 0.9.4
++ file_selector_macos 0.9.5
++ file_selector_platform_interface 2.7.0
++ file_selector_windows 0.9.3+5
++ fixnum 1.1.1
++ flutter 0.0.0 from sdk flutter
++ flutter_cache_manager 3.4.1
++ flutter_lints 6.0.0
++ flutter_plugin_android_lifecycle 2.0.34
++ flutter_staggered_animations 1.1.1
++ flutter_svg 2.2.4
++ flutter_test 0.0.0 from sdk flutter
++ flutter_web_plugins 0.0.0 from sdk flutter
++ fluttertoast 9.0.0
++ glob 2.1.3
++ hooks 1.0.3
++ html 0.15.6
++ http 1.6.0
++ http_parser 4.1.2
++ image_picker 1.2.1
++ image_picker_android 0.8.13+16
++ image_picker_for_web 3.1.1
++ image_picker_ios 0.8.13+6
++ image_picker_linux 0.2.2
++ image_picker_macos 0.2.2+1
++ image_picker_platform_interface 2.11.1
++ image_picker_windows 0.2.2
++ intl 0.20.2
++ jni 1.0.0
++ jni_flutter 1.0.1
++ leak_tracker 11.0.2
++ leak_tracker_flutter_testing 3.0.10
++ leak_tracker_testing 3.0.2
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.19
++ material_color_utilities 0.13.0
++ meta 1.17.0 (1.18.2 available)
++ mime 2.0.0
++ native_toolchain_c 0.17.6 (0.18.0 available)
++ nested 1.0.0
++ objective_c 9.3.0
++ octo_image 2.1.0
++ package_config 2.2.0
++ path 1.9.1
++ path_parsing 1.1.0
++ path_provider 2.1.5
++ path_provider_android 2.3.1
++ path_provider_foundation 2.6.0
++ path_provider_linux 2.2.1
++ path_provider_platform_interface 2.1.2
++ path_provider_windows 2.3.0
++ petitparser 7.0.2
++ photo_view 0.15.0
++ platform 3.1.6
++ plugin_platform_interface 2.1.8
++ provider 6.1.5+1
++ pub_semver 2.2.0
++ pull_to_refresh 2.0.0
++ record_use 0.6.0
++ rxdart 0.28.0
++ share_plus 13.1.0
++ share_plus_platform_interface 7.1.0
++ shared_preferences 2.5.5
++ shared_preferences_android 2.4.23
++ shared_preferences_foundation 2.5.6
++ shared_preferences_linux 2.4.1
++ shared_preferences_platform_interface 2.4.2
++ shared_preferences_web 2.4.3
++ shared_preferences_windows 2.4.1
++ shimmer 3.0.0
++ sky_engine 0.0.0 from sdk flutter
++ source_span 1.10.2
++ sqflite 2.4.2+1
++ sqflite_android 2.4.2+3
++ sqflite_common 2.5.6+1
++ sqflite_darwin 2.4.2
++ sqflite_platform_interface 2.4.0
++ stack_trace 1.12.1
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ synchronized 3.4.0+1
++ term_glyph 1.2.2
++ test_api 0.7.10 (0.7.11 available)
++ timeago 3.7.1
++ typed_data 1.4.0
++ universal_io 2.3.1
++ url_launcher_linux 3.2.2
++ url_launcher_platform_interface 2.3.2
++ url_launcher_web 2.4.2
++ url_launcher_windows 3.1.5
++ uuid 4.5.3
++ vector_graphics 1.1.21
++ vector_graphics_codec 1.1.13
++ vector_graphics_compiler 1.2.0
++ vector_math 2.2.0 (2.3.0 available)
++ video_player 2.11.1
++ video_player_android 2.9.5
++ video_player_avfoundation 2.9.4
++ video_player_platform_interface 6.6.0
++ video_player_web 2.4.0
++ visibility_detector 0.4.0+2
++ vm_service 15.1.0
++ web 1.1.1
++ win32 6.1.0
++ xdg_directories 1.1.0
++ xml 6.6.1
++ yaml 3.1.3
+Changed 129 dependencies!
+4 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+ℹ️ flutter_launcher_icons not found, skipping.
+ℹ️ build_runner not found, skipping.
+🔨 Building APKs...
+Running Gradle task 'assembleRelease'...                        
+lib/main.dart:468:20: Error: A value of type 'List<dynamic>' can't be assigned to a variable of type 'List<Reel>'.
+ - 'List' is from 'dart:core'.
+ - 'Reel' is from 'package:insta_reels_app/main.dart' ('lib/main.dart').
+          _reels = newReels;
+                   ^
+lib/main.dart:470:25: Error: The argument type 'List<dynamic>' can't be assigned to the parameter type 'Iterable<Reel>'.
+ - 'List' is from 'dart:core'.
+ - 'Iterable' is from 'dart:core'.
+ - 'Reel' is from 'package:insta_reels_app/main.dart' ('lib/main.dart').
+          _reels.addAll(newReels);
+                        ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command '/opt/hostedtoolcache/flutter/stable-3.41.7-x64/bin/flutter'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2m 26s
+Running Gradle task 'assembleRelease'...                          147.5s
+Gradle task assembleRelease failed with exit code 1
