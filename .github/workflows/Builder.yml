@@ -18,11 +18,11 @@ jobs:
         with:
           persist-credentials: true
 
-      # تعریف مسیر فایل لاگ (نام ثابت برای راحتی؛ می‌توان تاریخ/زمان اضافه کرد)
+      # تنظیم مسیر فایل لاگ
       - name: Set log file path
         run: echo "LOG_FILE=build_log.txt" >> $GITHUB_ENV
 
-      # پاک‌سازی فایل لاگ قبلی (در صورت وجود) و شروع لاگ‌گیری کلی با هدایت خروجی‌ها
+      # ایجاد فایل لاگ اولیه (همیشه اجرا می‌شود)
       - name: Initialize log file
         run: |
           echo "=== Flutter Build Log - $(date) ===" > ${{ env.LOG_FILE }}
@@ -74,7 +74,6 @@ jobs:
           echo "📦 Installing dependencies..." | tee -a ${{ env.LOG_FILE }}
           flutter pub get 2>&1 | tee -a ${{ env.LOG_FILE }}
 
-      # اجرای شرطی ابزارهای اختیاری
       - name: Generate launcher icons (if configured)
         run: |
           if grep -q "flutter_launcher_icons" pubspec.yaml; then
@@ -93,13 +92,11 @@ jobs:
             echo "ℹ️ build_runner not found, skipping." | tee -a ${{ env.LOG_FILE }}
           fi
 
-      # ساخت APK‌های تفکیک‌شده بر اساس معماری
       - name: Build Release APKs (split per ABI)
         run: |
           echo "🔨 Building APKs..." | tee -a ${{ env.LOG_FILE }}
           flutter build apk --release --split-per-abi 2>&1 | tee -a ${{ env.LOG_FILE }}
 
-      # آماده‌سازی پوشه apk در ریشه مخزن
       - name: Prepare APK directory
         run: |
           mkdir -p apk
@@ -108,19 +105,42 @@ jobs:
       - name: Copy APKs to repository folder
         run: cp build/app/outputs/flutter-apk/*.apk apk/
 
-      # ذخیره لاگ نهایی در فایل متنی (همراه با تاریخ اتمام)
       - name: Finalize log file
         run: |
           echo "===================================" >> ${{ env.LOG_FILE }}
           echo "Build completed at $(date)" >> ${{ env.LOG_FILE }}
           echo "Log file size: $(du -h ${{ env.LOG_FILE }} | cut -f1)" >> ${{ env.LOG_FILE }}
 
-      # کامیت و push همزمان APK و فایل لاگ به مخزن
-      - name: Commit and push APKs + build log to repository
+      # این مرحله همیشه اجرا می‌شود – حتی اگر مراحل قبلی با خطا مواجه شده باشند
+      - name: Upload logs and APKs (always)
+        if: always()
         run: |
+          echo "📤 Attempting to push build log and APKs..."
+
+          # بررسی وجود دایرکتوری .git (مطمئن شویم یک مخزن Git است)
+          if [ ! -d ".git" ]; then
+            echo "⚠️ Not a git repository. Cannot push logs." | tee -a ${{ env.LOG_FILE }}
+            exit 0
+          fi
+
+          # بررسی وجود فایل لاگ
+          if [ ! -f "${{ env.LOG_FILE }}" ]; then
+            echo "⚠️ Log file not found. Creating an empty one." | tee -a ${{ env.LOG_FILE }}
+            echo "Build failed before log file creation." > ${{ env.LOG_FILE }}
+          fi
+
+          # پیکربندی git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f apk/*.apk
+
+          # اضافه کردن APKها (اگر موجود باشند)
+          if ls apk/*.apk 1> /dev/null 2>&1; then
+            git add -f apk/*.apk
+          fi
+
+          # اضافه کردن فایل لاگ
           git add -f ${{ env.LOG_FILE }}
-          git commit -m "📦 Update APK builds & build log [skip ci]" || echo "No changes to commit"
-          git push
+
+          # تلاش برای کامیت و push – در صورت عدم تغییر، خطا نمی‌دهد
+          git commit -m "📦 Update APK builds & build log [skip ci]" || echo "✅ No changes to commit"
+          git push || echo "⚠️ Push failed (maybe no changes or network issue)"
