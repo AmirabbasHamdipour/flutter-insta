@@ -1,5 +1,5 @@
-name: nokhod_news
-description: یک خبرخوان پیشرفته با استفاده از API
+name: insta_reels_app
+description: A full-featured Instagram-like app with Reels and Stories.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,28 +11,34 @@ dependencies:
     sdk: flutter
 
   # Networking
-  http:
-
-  # Local storage
-  hive:
-  hive_flutter:
+  dio:
+  dio_cookie_manager:
+  cookie_jar:
   path_provider:
 
   # State management
   provider:
 
-  # UI
-  cached_network_image:
-  flutter_html:
+  # Media
   video_player:
-  chewie:
-  flutter_localizations:
-    sdk: flutter
-  intl:
-  shamsi_date:
+  image_picker:
+  cached_network_image:
+  photo_view:
 
-  # Settings
+  # UI & Helpers
   shared_preferences:
+  pull_to_refresh:
+  visibility_detector:
+  intl:
+  fluttertoast:
+  share_plus:
+  flutter_svg:
+  shimmer:
+  flutter_staggered_animations:
+  timeago:
+
+  # Utils
+  mime:
 
 dev_dependencies:
   flutter_test:
@@ -41,9 +47,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # فونت وزیر (فایل را در assets/fonts/Vazir.ttf قرار دهید)
-  fonts:
-    - family: Vazir
-      fonts:
-        - asset: assets/fonts/Vazir.ttf
+  assets:
+    # Add any assets if needed (optional)
+    # - assets/icons/
