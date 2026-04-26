@@ -1,49 +1,23 @@
-name: insta_reels_app
-description: A full-featured Instagram-like app with Reels and Stories.
+name: todo_app
+description: اپلیکیشن مدیریت کارها با قابلیت ذخیره‌سازی دائمی
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-
-  # Networking
-  dio:
-  dio_cookie_manager:
-  cookie_jar:
-  path_provider:
-
-  # State management
-  provider:
-
-  # Media
-  video_player:
-  image_picker:
-  cached_network_image:
-  photo_view:
-
-  # UI & Helpers
-  shared_preferences:
-  pull_to_refresh:
-  visibility_detector:
+  sqflite:
+  path:
   intl:
-  fluttertoast:
-  share_plus:
-  flutter_svg:
-  shimmer:
-  flutter_staggered_animations:
-  timeago:
-
-  # Utils
-  mime:
+  provider:
+  flutter_slidable:
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints:
 
 flutter:
   uses-material-design: true
