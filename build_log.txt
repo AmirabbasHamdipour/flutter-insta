@@ -1,8 +1,8 @@
-=== Flutter Build Log - Sun Apr 26 14:09:13 UTC 2026 ===
+=== Flutter Build Log - Mon Apr 27 18:22:36 UTC 2026 ===
 Repository: AmirabbasHamdipour/flutter-insta
 Branch: refs/heads/main
 Workflow: Flutter Android Build + Push APK to Repo
-Run ID: 24958608153
+Run ID: 25012185938
 ===================================
 Checking for pubspec.yaml...
 ✅ Project found.
@@ -52,24 +52,24 @@ Try `flutter pub outdated` for more information.
 ℹ️ build_runner not found, skipping.
 🔨 Building APKs...
 Running Gradle task 'assembleRelease'...                        
-lib/main.dart:395:61: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
+lib/main.dart:396:61: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
  - 'Context' is from 'package:path/src/context.dart' ('../../../.pub-cache/hosted/pub.dev/path-1.9.1/lib/src/context.dart').
- - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.7-x64/packages/flutter/lib/src/widgets/framework.dart').
+ - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.8-x64/packages/flutter/lib/src/widgets/framework.dart').
                 onPressed: () => _confirmDeleteAllCompleted(context, provider),
                                                             ^
-lib/main.dart:440:23: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
+lib/main.dart:442:23: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
  - 'Context' is from 'package:path/src/context.dart' ('../../../.pub-cache/hosted/pub.dev/path-1.9.1/lib/src/context.dart').
- - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.7-x64/packages/flutter/lib/src/widgets/framework.dart').
+ - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.8-x64/packages/flutter/lib/src/widgets/framework.dart').
       color: Theme.of(context).colorScheme.surface,
                       ^
-lib/main.dart:520:37: Error: The method 'read' isn't defined for the type 'Context'.
+lib/main.dart:523:37: Error: The method 'read' isn't defined for the type 'Context'.
  - 'Context' is from 'package:path/src/context.dart' ('../../../.pub-cache/hosted/pub.dev/path-1.9.1/lib/src/context.dart').
 Try correcting the name to the name of an existing method, or defining a method named 'read'.
           onChanged: (_) => context.read<TodoProvider>().toggleComplete(todo),
                                     ^^^^
-lib/main.dart:522:44: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
+lib/main.dart:526:44: Error: The argument type 'Context' can't be assigned to the parameter type 'BuildContext'.
  - 'Context' is from 'package:path/src/context.dart' ('../../../.pub-cache/hosted/pub.dev/path-1.9.1/lib/src/context.dart').
- - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.7-x64/packages/flutter/lib/src/widgets/framework.dart').
+ - 'BuildContext' is from 'package:flutter/src/widgets/framework.dart' ('/opt/hostedtoolcache/flutter/stable-3.41.8-x64/packages/flutter/lib/src/widgets/framework.dart').
         onLongPress: () => _showEditDialog(context, todo),
                                            ^
 Target kernel_snapshot_program failed: Exception
@@ -79,7 +79,7 @@ FAILURE: Build failed with an exception.
 
 * What went wrong:
 Execution failed for task ':app:compileFlutterBuildRelease'.
-> Process 'command '/opt/hostedtoolcache/flutter/stable-3.41.7-x64/bin/flutter'' finished with non-zero exit value 1
+> Process 'command '/opt/hostedtoolcache/flutter/stable-3.41.8-x64/bin/flutter'' finished with non-zero exit value 1
 
 * Try:
 > Run with --stacktrace option to get the stack trace.
@@ -87,6 +87,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 45s
-Running Gradle task 'assembleRelease'...                          106.1s
+BUILD FAILED in 1m 47s
+Running Gradle task 'assembleRelease'...                          108.6s
 Gradle task assembleRelease failed with exit code 1
