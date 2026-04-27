@@ -1,7 +1,7 @@
 // کتابخانه‌های مورد نیاز
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' hide Context; // جلوگیری از تداخل Context با BuildContext
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -392,6 +392,7 @@ class _HomePageState extends State<HomePage> {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
+                // تصحیح: context حالا BuildContext است و مشکلی ندارد
                 onPressed: () => _confirmDeleteAllCompleted(context, provider),
                 icon: const Icon(Icons.delete_sweep),
                 label: const Text('حذف همه کارهای انجام شده'),
@@ -435,6 +436,7 @@ class _HomePageState extends State<HomePage> {
 
   // ردیف پایینی برای افزودن کار جدید (فیلد متن + انتخاب اولویت + دکمه)
   Widget _buildAddTaskRow(TodoProvider provider) {
+    // اکنون context داخل متد build در دسترس است
     return Container(
       padding: const EdgeInsets.all(8.0),
       color: Theme.of(context).colorScheme.surface,
@@ -517,8 +519,10 @@ class _HomePageState extends State<HomePage> {
         subtitle: Text(relativeDate),
         trailing: Checkbox(
           value: todo.isCompleted,
+          // تصحیح: context.read به درستی کار می‌کند
           onChanged: (_) => context.read<TodoProvider>().toggleComplete(todo),
         ),
+        // تصحیح: context برای دیالوگ ویرایش
         onLongPress: () => _showEditDialog(context, todo),
       ),
     );
